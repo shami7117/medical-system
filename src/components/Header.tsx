@@ -27,7 +27,7 @@ const Header: React.FC<HeaderProps> = ({ currentTime }) => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">
-                MedFlow Dashboard
+                Segai Dashboard
               </h1>
               <p className="text-sm text-gray-500">Outpatient Management</p>
             </div>
