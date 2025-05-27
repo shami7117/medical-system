@@ -13,11 +13,24 @@ import {
   HelpCircle,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Building2,
   UserCheck,
   Pill,
   Heart,
+  Edit3,
+  Brain,
+  Baby,
+  Eye,
+  Ear,
+  Scissors,
+  Zap,
+  ScanLine,
+  TestTube,
+  Palette,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface MenuItem {
   id: string;
@@ -25,6 +38,7 @@ interface MenuItem {
   icon: React.ComponentType<{ className?: string }>;
   path: string;
   badge?: string;
+  children?: MenuItem[];
 }
 
 interface SidebarProps {
@@ -40,6 +54,101 @@ const Sidebar: React.FC<SidebarProps> = ({
   activeItem,
   setActiveItem,
 }) => {
+  const [expandedItems, setExpandedItems] = useState<string[]>([
+    "notes",
+    "emergency-notes",
+    "clinic-notes",
+  ]);
+  const router = useRouter();
+
+  // Mock router functionality for demo
+  const handleNavigation = (path: string) => {
+    console.log(`Navigating to ${path}`);
+    router.push(path);
+  };
+
+  // Specialty configurations with correct dynamic route paths
+  const specialtyItems: MenuItem[] = [
+    {
+      id: "general-medicine",
+      label: "General Medicine",
+      icon: Stethoscope,
+      path: "/clinic/general-medicine/notes",
+    },
+    {
+      id: "general-surgery",
+      label: "General Surgery",
+      icon: Scissors,
+      path: "/clinic/general-surgery/notes",
+    },
+    {
+      id: "paediatrics",
+      label: "Paediatrics",
+      icon: Baby,
+      path: "/clinic/paediatrics/notes",
+    },
+    {
+      id: "obstetrics",
+      label: "Obstetrics",
+      icon: Heart,
+      path: "/clinic/obstetrics/notes",
+    },
+    {
+      id: "gynaecology",
+      label: "Gynaecology",
+      icon: Heart,
+      path: "/clinic/gynaecology/notes",
+    },
+    {
+      id: "dermatology",
+      label: "Dermatology",
+      icon: Palette,
+      path: "/clinic/dermatology/notes",
+    },
+    {
+      id: "ent",
+      label: "ENT (Ear, Nose & Throat)",
+      icon: Ear,
+      path: "/clinic/ent/notes",
+    },
+    {
+      id: "ophthalmology",
+      label: "Ophthalmology",
+      icon: Eye,
+      path: "/clinic/ophthalmology/notes",
+    },
+    {
+      id: "cardiology",
+      label: "Cardiology",
+      icon: Heart,
+      path: "/clinic/cardiology/notes",
+    },
+    {
+      id: "orthopaedics",
+      label: "Orthopaedics",
+      icon: Zap,
+      path: "/clinic/orthopaedics/notes",
+    },
+    {
+      id: "radiology",
+      label: "Radiology",
+      icon: ScanLine,
+      path: "/clinic/radiology/notes",
+    },
+    {
+      id: "psychiatry",
+      label: "Psychiatry",
+      icon: Brain,
+      path: "/clinic/psychiatry/notes",
+    },
+    {
+      id: "pathology",
+      label: "Pathology",
+      icon: TestTube,
+      path: "/clinic/pathology/notes",
+    },
+  ];
+
   const menuItems: MenuItem[] = [
     {
       id: "dashboard",
@@ -49,18 +158,42 @@ const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: "emergency",
-      label: "Emergency",
+      label: "Emergency Worklist",
       icon: AlertTriangle,
-      path: "/emergency",
+      path: "/worklist/emergency",
       badge: "8",
     },
     {
       id: "clinic",
-      label: "Outpatient Clinic",
+      label: "Outpatient Worklist",
       icon: Stethoscope,
-      path: "/clinic",
+      path: "/worklist/clinic",
       badge: "45",
     },
+    {
+      id: "notes",
+      label: "Notes",
+      icon: Edit3,
+      path: "#",
+      children: [
+        {
+          id: "emergency-notes",
+          label: "Emergency Notes",
+          icon: AlertTriangle,
+          path: "/emergency/notes",
+          badge: "8",
+        },
+        {
+          id: "clinic-notes",
+          label: "Clinic Notes",
+          icon: Stethoscope,
+          path: "#",
+          badge: "45",
+          children: specialtyItems,
+        },
+      ],
+    },
+
     {
       id: "patients",
       label: "Patient Management",
@@ -79,13 +212,6 @@ const Sidebar: React.FC<SidebarProps> = ({
       icon: FileText,
       path: "/records",
     },
-    // {
-    //   id: "lab",
-    //   label: "Lab Results",
-    //   icon: Activity,
-    //   path: "/lab",
-    //   badge: "23",
-    // },
     {
       id: "pharmacy",
       label: "Pharmacy",
@@ -98,12 +224,6 @@ const Sidebar: React.FC<SidebarProps> = ({
       icon: Heart,
       path: "/vitals",
     },
-    // {
-    //   id: "reports",
-    //   label: "Reports & Analytics",
-    //   icon: BarChart3,
-    //   path: "/reports",
-    // },
   ];
 
   const bottomMenuItems: MenuItem[] = [
@@ -122,12 +242,114 @@ const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const handleMenuClick = (item: MenuItem) => {
-    setActiveItem(item.id);
-    console.log(`Navigating to ${item.path}`);
+    // If item has children and no path (is a parent), toggle expansion
+    if (item.children && item.path === "#") {
+      toggleExpanded(item.id);
+      return;
+    }
+
+    // If item has a real path, navigate
+    if (item.path && item.path !== "#") {
+      setActiveItem(item.id);
+      handleNavigation(item.path);
+    }
+  };
+
+  const toggleExpanded = (itemId: string) => {
+    setExpandedItems((prev) =>
+      prev.includes(itemId)
+        ? prev.filter((id) => id !== itemId)
+        : [...prev, itemId]
+    );
   };
 
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed);
+  };
+
+  const isExpanded = (itemId: string) => expandedItems.includes(itemId);
+
+  const isItemActive = (item: MenuItem): boolean => {
+    if (activeItem === item.id) return true;
+    if (item.children) {
+      return item.children.some((child) => isItemActive(child));
+    }
+    return false;
+  };
+
+  const renderMenuItem = (item: MenuItem, level: number = 0) => {
+    const Icon = item.icon;
+    const isActive = isItemActive(item);
+    const hasChildren = item.children && item.children.length > 0;
+    const expanded = isExpanded(item.id);
+    const paddingLeft = isCollapsed
+      ? "px-2"
+      : level === 0
+      ? "px-3"
+      : level === 1
+      ? "pl-8 pr-3"
+      : "pl-12 pr-3";
+
+    return (
+      <div key={item.id}>
+        <Button
+          variant="ghost"
+          onClick={() => handleMenuClick(item)}
+          className={`w-full justify-start h-10 ${
+            activeItem === item.id
+              ? "bg-blue-50 text-blue-700 hover:bg-blue-100 border-r-2 border-blue-600"
+              : isActive && level === 0
+              ? "bg-blue-25 text-blue-600 hover:bg-blue-50"
+              : "text-gray-700 hover:bg-gray-100"
+          } ${paddingLeft}`}
+        >
+          <div className="flex items-center w-full">
+            <Icon
+              className={`h-4 w-4 ${isCollapsed ? "" : "mr-3"} ${
+                activeItem === item.id
+                  ? "text-blue-600"
+                  : isActive && level === 0
+                  ? "text-blue-500"
+                  : "text-gray-500"
+              }`}
+            />
+            {!isCollapsed && (
+              <>
+                <span className="flex-1 text-left text-sm">{item.label}</span>
+                <div className="flex items-center gap-2">
+                  {item.badge && (
+                    <span
+                      className={`px-2 py-0.5 text-xs rounded-full ${
+                        item.id.includes("emergency")
+                          ? "bg-red-100 text-red-700"
+                          : item.id.includes("lab")
+                          ? "bg-yellow-100 text-yellow-700"
+                          : "bg-blue-100 text-blue-700"
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                  {hasChildren &&
+                    (expanded ? (
+                      <ChevronUp className="h-3 w-3 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3 text-gray-400" />
+                    ))}
+                </div>
+              </>
+            )}
+          </div>
+        </Button>
+
+        {/* Render children */}
+        {hasChildren && expanded && !isCollapsed && (
+          <div className="mt-1 space-y-1">
+            {item.children!.map((child) => renderMenuItem(child, level + 1))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -172,47 +394,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* Main Navigation */}
       <div className="flex-1 overflow-y-auto py-4">
         <nav className="space-y-1 px-3">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeItem === item.id;
-
-            return (
-              <Button
-                key={item.id}
-                variant="ghost"
-                onClick={() => handleMenuClick(item)}
-                className={`w-full justify-start h-10 ${
-                  isActive
-                    ? "bg-blue-50 text-blue-700 hover:bg-blue-100 border-r-2 border-blue-600"
-                    : "text-gray-700 hover:bg-gray-100"
-                } ${isCollapsed ? "px-2" : "px-3"}`}
-              >
-                <Icon
-                  className={`h-5 w-5 ${isCollapsed ? "" : "mr-3"} ${
-                    isActive ? "text-blue-600" : "text-gray-500"
-                  }`}
-                />
-                {!isCollapsed && (
-                  <>
-                    <span className="flex-1 text-left">{item.label}</span>
-                    {item.badge && (
-                      <span
-                        className={`px-2 py-1 text-xs rounded-full ${
-                          item.id === "emergency"
-                            ? "bg-red-100 text-red-700"
-                            : item.id === "lab"
-                            ? "bg-yellow-100 text-yellow-700"
-                            : "bg-blue-100 text-blue-700"
-                        }`}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
-                  </>
-                )}
-              </Button>
-            );
-          })}
+          {menuItems.map((item) => renderMenuItem(item))}
         </nav>
       </div>
 
@@ -238,32 +420,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* Bottom Navigation */}
       <div className="p-3 border-t border-gray-200">
         <nav className="space-y-1">
-          {bottomMenuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeItem === item.id;
-
-            return (
-              <Button
-                key={item.id}
-                variant="ghost"
-                onClick={() => handleMenuClick(item)}
-                className={`w-full justify-start h-10 ${
-                  isActive
-                    ? "bg-blue-50 text-blue-700 hover:bg-blue-100"
-                    : "text-gray-700 hover:bg-gray-100"
-                } ${isCollapsed ? "px-2" : "px-3"}`}
-              >
-                <Icon
-                  className={`h-5 w-5 ${isCollapsed ? "" : "mr-3"} ${
-                    isActive ? "text-blue-600" : "text-gray-500"
-                  }`}
-                />
-                {!isCollapsed && (
-                  <span className="flex-1 text-left">{item.label}</span>
-                )}
-              </Button>
-            );
-          })}
+          {bottomMenuItems.map((item) => renderMenuItem(item))}
         </nav>
       </div>
     </div>
