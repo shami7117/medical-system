@@ -29,6 +29,8 @@ import {
   ScanLine,
   TestTube,
   Palette,
+  HospitalIcon,
+  Folder,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -54,11 +56,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   activeItem,
   setActiveItem,
 }) => {
-  const [expandedItems, setExpandedItems] = useState<string[]>([
-    "notes",
-    "emergency-notes",
-    "clinic-notes",
-  ]);
+  // Changed: All dropdowns closed by default
+  const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const router = useRouter();
 
   // Mock router functionality for demo
@@ -67,85 +66,248 @@ const Sidebar: React.FC<SidebarProps> = ({
     router.push(path);
   };
 
-  // Specialty configurations with correct dynamic route paths
-  const specialtyItems: MenuItem[] = [
+  // Specialty configurations with correct dynamic route paths for notes
+  const specialtyNotesItems: MenuItem[] = [
     {
-      id: "general-medicine",
+      id: "general-medicine-notes",
       label: "General Medicine",
       icon: Stethoscope,
       path: "/clinic/general-medicine/notes",
     },
     {
-      id: "general-surgery",
+      id: "general-surgery-notes",
       label: "General Surgery",
       icon: Scissors,
       path: "/clinic/general-surgery/notes",
     },
     {
-      id: "paediatrics",
+      id: "paediatrics-notes",
       label: "Paediatrics",
       icon: Baby,
       path: "/clinic/paediatrics/notes",
     },
     {
-      id: "obstetrics",
+      id: "obstetrics-notes",
       label: "Obstetrics",
       icon: Heart,
       path: "/clinic/obstetrics/notes",
     },
     {
-      id: "gynaecology",
+      id: "gynaecology-notes",
       label: "Gynaecology",
       icon: Heart,
       path: "/clinic/gynaecology/notes",
     },
     {
-      id: "dermatology",
+      id: "dermatology-notes",
       label: "Dermatology",
       icon: Palette,
       path: "/clinic/dermatology/notes",
     },
     {
-      id: "ent",
+      id: "ent-notes",
       label: "ENT (Ear, Nose & Throat)",
       icon: Ear,
       path: "/clinic/ent/notes",
     },
     {
-      id: "ophthalmology",
+      id: "ophthalmology-notes",
       label: "Ophthalmology",
       icon: Eye,
       path: "/clinic/ophthalmology/notes",
     },
     {
-      id: "cardiology",
+      id: "cardiology-notes",
       label: "Cardiology",
       icon: Heart,
       path: "/clinic/cardiology/notes",
     },
     {
-      id: "orthopaedics",
+      id: "orthopaedics-notes",
       label: "Orthopaedics",
       icon: Zap,
       path: "/clinic/orthopaedics/notes",
     },
     {
-      id: "radiology",
+      id: "radiology-notes",
       label: "Radiology",
       icon: ScanLine,
       path: "/clinic/radiology/notes",
     },
     {
-      id: "psychiatry",
+      id: "psychiatry-notes",
       label: "Psychiatry",
       icon: Brain,
       path: "/clinic/psychiatry/notes",
     },
     {
-      id: "pathology",
+      id: "pathology-notes",
       label: "Pathology",
       icon: TestTube,
       path: "/clinic/pathology/notes",
+    },
+  ];
+
+  // Specialty configurations for vitals pages
+  const specialtyVitalsItems: MenuItem[] = [
+    {
+      id: "general-medicine-vitals",
+      label: "General Medicine",
+      icon: Stethoscope,
+      path: "/clinic/vitals/general-medicine",
+    },
+    {
+      id: "general-surgery-vitals",
+      label: "General Surgery",
+      icon: Scissors,
+      path: "/clinic/vitals/general-surgery",
+    },
+    {
+      id: "paediatrics-vitals",
+      label: "Paediatrics",
+      icon: Baby,
+      path: "/clinic/vitals/paediatrics",
+    },
+    {
+      id: "obstetrics-vitals",
+      label: "Obstetrics",
+      icon: Heart,
+      path: "/clinic/vitals/obstetrics",
+    },
+    {
+      id: "gynaecology-vitals",
+      label: "Gynaecology",
+      icon: Heart,
+      path: "/clinic/vitals/gynaecology",
+    },
+    {
+      id: "dermatology-vitals",
+      label: "Dermatology",
+      icon: Palette,
+      path: "/clinic/vitals/dermatology",
+    },
+    {
+      id: "ent-vitals",
+      label: "ENT (Ear, Nose & Throat)",
+      icon: Ear,
+      path: "/clinic/vitals/ent",
+    },
+    {
+      id: "ophthalmology-vitals",
+      label: "Ophthalmology",
+      icon: Eye,
+      path: "/clinic/vitals/ophthalmology",
+    },
+    {
+      id: "cardiology-vitals",
+      label: "Cardiology",
+      icon: Heart,
+      path: "/clinic/vitals/cardiology",
+    },
+    {
+      id: "orthopaedics-vitals",
+      label: "Orthopaedics",
+      icon: Zap,
+      path: "/clinic/vitals/orthopaedics",
+    },
+    {
+      id: "radiology-vitals",
+      label: "Radiology",
+      icon: ScanLine,
+      path: "/clinic/vitals/radiology",
+    },
+    {
+      id: "psychiatry-vitals",
+      label: "Psychiatry",
+      icon: Brain,
+      path: "/clinic/vitals/psychiatry",
+    },
+    {
+      id: "pathology-vitals",
+      label: "Pathology",
+      icon: TestTube,
+      path: "/clinic/vitals/pathology",
+    },
+  ];
+
+  const specialtyResultsItems: MenuItem[] = [
+    {
+      id: "general-medicine-notes",
+      label: "General Medicine",
+      icon: Stethoscope,
+      path: "/clinic/general-medicine/results",
+    },
+    {
+      id: "general-surgery-notes",
+      label: "General Surgery",
+      icon: Scissors,
+      path: "/clinic/general-surgery/results",
+    },
+    {
+      id: "paediatrics-notes",
+      label: "Paediatrics",
+      icon: Baby,
+      path: "/clinic/paediatrics/results",
+    },
+    {
+      id: "obstetrics-notes",
+      label: "Obstetrics",
+      icon: Heart,
+      path: "/clinic/obstetrics/results",
+    },
+    {
+      id: "gynaecology-notes",
+      label: "Gynaecology",
+      icon: Heart,
+      path: "/clinic/gynaecology/results",
+    },
+    {
+      id: "dermatology-notes",
+      label: "Dermatology",
+      icon: Palette,
+      path: "/clinic/dermatology/results",
+    },
+    {
+      id: "ent-notes",
+      label: "ENT (Ear, Nose & Throat)",
+      icon: Ear,
+      path: "/clinic/ent/results",
+    },
+    {
+      id: "ophthalmology-notes",
+      label: "Ophthalmology",
+      icon: Eye,
+      path: "/clinic/ophthalmology/results",
+    },
+    {
+      id: "cardiology-notes",
+      label: "Cardiology",
+      icon: Heart,
+      path: "/clinic/cardiology/results",
+    },
+    {
+      id: "orthopaedics-notes",
+      label: "Orthopaedics",
+      icon: Zap,
+      path: "/clinic/orthopaedics/results",
+    },
+    {
+      id: "radiology-notes",
+      label: "Radiology",
+      icon: ScanLine,
+      path: "/clinic/radiology/results",
+    },
+    {
+      id: "psychiatry-notes",
+      label: "Psychiatry",
+      icon: Brain,
+      path: "/clinic/psychiatry/results",
+    },
+    {
+      id: "pathology-notes",
+      label: "Pathology",
+      icon: TestTube,
+      path: "/clinic/pathology/results",
     },
   ];
 
@@ -155,6 +317,13 @@ const Sidebar: React.FC<SidebarProps> = ({
       label: "Dashboard",
       icon: LayoutDashboard,
       path: "/dashboard",
+    },
+    {
+      id: "clinic-overview",
+      label: "Clinic Overview",
+      icon: HospitalIcon,
+      path: "/clinic",
+      badge: "8",
     },
     {
       id: "emergency",
@@ -189,41 +358,86 @@ const Sidebar: React.FC<SidebarProps> = ({
           icon: Stethoscope,
           path: "#",
           badge: "45",
-          children: specialtyItems,
+          children: specialtyNotesItems,
+        },
+      ],
+    },
+    // Added: Vital Signs section with emergency and clinic subsections
+    {
+      id: "vitals",
+      label: "Vital Signs",
+      icon: Activity,
+      path: "#",
+      children: [
+        {
+          id: "emergency-vitals",
+          label: "Emergency Vitals",
+          icon: AlertTriangle,
+          path: "/emergency/vitals",
+          badge: "8",
+        },
+        {
+          id: "clinic-vitals",
+          label: "Clinic Vitals",
+          icon: Heart,
+          path: "#",
+          badge: "45",
+          children: specialtyVitalsItems,
         },
       ],
     },
 
     {
-      id: "patients",
-      label: "Patient Management",
-      icon: Users,
-      path: "/patients",
+      id: "emergency-prescriptions",
+      label: "Emergency Prescriptions",
+      icon: Folder,
+      path: "/emergency/prescriptions",
     },
     {
-      id: "appointments",
-      label: "Appointments",
-      icon: Calendar,
-      path: "/appointments",
-    },
-    {
-      id: "records",
-      label: "Medical Records",
+      id: "emergency-results",
+      label: "Emergency Results",
       icon: FileText,
-      path: "/records",
+      path: "/emergency/results",
     },
     {
-      id: "pharmacy",
-      label: "Pharmacy",
-      icon: Pill,
-      path: "/pharmacy",
+      id: "emergency-history",
+      label: "Emergency History",
+      icon: FileText,
+      path: "/emergency/history",
     },
     {
-      id: "vitals",
-      label: "Vital Signs",
-      icon: Heart,
-      path: "/vitals",
+      id: "clinic-results",
+      label: "Clinic Results",
+      icon: FileText,
+      path: "#",
+      badge: "45",
+      children: specialtyResultsItems,
     },
+
+    // {
+    //   id: "patients",
+    //   label: "Patient Management",
+    //   icon: Users,
+    //   path: "/patients",
+    // },
+    // {
+    //   id: "appointments",
+    //   label: "Appointments",
+    //   icon: Calendar,
+    //   path: "/appointments",
+    // },
+    // {
+    //   id: "records",
+    //   label: "Medical Records",
+    //   icon: FileText,
+    //   path: "/records",
+    // },
+    // {
+    //   id: "pharmacy",
+    //   label: "Pharmacy",
+    //   icon: Pill,
+    //   path: "/pharmacy",
+    // },
   ];
 
   const bottomMenuItems: MenuItem[] = [
@@ -355,7 +569,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div
       className={`${
-        isCollapsed ? "w-16" : "w-64"
+        isCollapsed ? "w-16" : "w-68"
       } transition-all duration-300 ease-in-out bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0`}
     >
       {/* Logo Section */}

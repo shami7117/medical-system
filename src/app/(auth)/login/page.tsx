@@ -95,7 +95,7 @@ export default function LoginPage() {
             </div>
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            MedFlow Hospital
+            Segai Hospital
           </h1>
           <p className="text-gray-600">Outpatient Management System</p>
         </div>
@@ -217,7 +217,7 @@ export default function LoginPage() {
             <span>24/7 Support</span>
           </div>
           <p className="mt-2 text-xs text-gray-500">
-            © 2025 MedFlow Hospital. All rights reserved.
+            © 2025 Segai Hospital. All rights reserved.
           </p>
         </div>
       </div>
