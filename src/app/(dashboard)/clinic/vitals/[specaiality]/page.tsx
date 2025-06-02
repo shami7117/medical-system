@@ -46,14 +46,13 @@ interface SpecialtyField {
 }
 
 interface ClinicVitalsPageProps {
-  params: {
+  params: Promise<{
     speciality: string;
-  };
+  }>;
 }
 
 const ClinicVitalsPage: React.FC<ClinicVitalsPageProps> = ({ params }) => {
-  const { speciality } = params;
-  console.log("Specialty:", speciality);
+  const [speciality, setSpeciality] = useState<string>("");
   const [selectedPatient, setSelectedPatient] = useState<string>("");
   const [tempUnit, setTempUnit] = useState<"C" | "F">("C");
   const [timestamp, setTimestamp] = useState<string>("");
@@ -206,10 +205,19 @@ const ClinicVitalsPage: React.FC<ClinicVitalsPageProps> = ({ params }) => {
   };
 
   useEffect(() => {
+    // Resolve the params Promise and set speciality
+    const resolveParams = async () => {
+      const resolvedParams = await params;
+      setSpeciality(resolvedParams.speciality);
+      console.log("Specialty:", resolvedParams.speciality);
+    };
+
+    resolveParams();
+
     // Auto-populate timestamp
     const now = new Date();
     setTimestamp(now.toLocaleString());
-  }, []);
+  }, [params]);
 
   // Get current specialty configuration
   const currentSpecialty = speciality || "general";
@@ -582,7 +590,7 @@ const ClinicVitalsPage: React.FC<ClinicVitalsPageProps> = ({ params }) => {
           <Button
             onClick={handleCompleteVisit}
             variant="default"
-            className="bg-green-600 hover:green-700 flex-1"
+            className="bg-green-600 hover:bg-green-700 flex-1"
             disabled={!selectedPatient}
           >
             Complete Visit
