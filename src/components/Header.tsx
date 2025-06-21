@@ -3,12 +3,13 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Activity, Bell, Settings, LogOut } from "lucide-react";
-
+import { useLogout } from "@/hooks/useAuth";
 interface HeaderProps {
   currentTime: Date;
 }
 
 const Header: React.FC<HeaderProps> = ({ currentTime }) => {
+  const { mutate: logout, isPending } = useLogout();
   const formatTime = (date: Date): string => {
     return date.toLocaleTimeString("en-US", {
       hour: "2-digit",
@@ -48,7 +49,12 @@ const Header: React.FC<HeaderProps> = ({ currentTime }) => {
             <Button variant="ghost" size="sm">
               <Settings className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm">
+            <Button
+              onClick={() => logout()}
+              variant="ghost"
+              size="sm"
+              disabled={isPending}
+            >
               <LogOut className="h-4 w-4" />
             </Button>
           </div>

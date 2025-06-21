@@ -1,0 +1,555 @@
+// Prisma Schema for Multi-Tenant Hospital Outpatient Management System
+// This schema supports complete tenant isolation and role-based access control
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ================================
+// CORE TENANT & USER MODELS
+// ================================
+
+model Hospital {
+  id      String  @id @default(cuid())
+  name    String
+  address String?
+  phone   String?
+  email   String?
+  website String?
+  logo    String? // URL or file path to hospital logo
+
+  // Registration tracking
+  registrationStep Int     @default(1) // 1 = basic info, 2 = admin setup, 3 = complete
+  isActive         Boolean @default(false)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations - All entities belong to a hospital (tenant isolation)
+  users         User[]
+  patients      Patient[]
+  visits        Visit[]
+  vitals        Vitals[]
+  clinicalNotes ClinicalNote[]
+  progressNotes ProgressNote[]
+  prescriptions Prescription[]
+  results       Result[]
+  problems      Problem[]
+  auditLogs     AuditLog[]
+  specialties   Specialty[]
+
+  @@map("hospitals")
+}
+
+// User roles enum - hierarchical permissions
+enum UserRole {
+  ADMIN // Full hospital management, user creation
+  DOCTOR // Patient care, prescriptions, clinical notes
+  NURSE // Vitals, basic patient care, progress notes
+  RECEPTIONIST // Patient registration, appointment scheduling
+}
+
+model User {
+  id           String  @id @default(cuid())
+  name         String
+  email        String
+  passwordHash String // Hashed password
+  employeeId   String? // Hospital employee ID
+  phone        String?
+
+  // Multi-tenant isolation
+  hospitalId String
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  // Role-based access control
+  role UserRole @default(RECEPTIONIST)
+
+  // Account status
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations - Track user actions
+  createdPatients      Patient[]      @relation("CreatedByUser")
+  createdVisits        Visit[]        @relation("CreatedByUser")
+  assignedVisits       Visit[]        @relation("AssignedToUser")
+  createdVitals        Vitals[]       @relation("CreatedByUser")
+  createdClinicalNotes ClinicalNote[] @relation("CreatedByUser")
+  createdProgressNotes ProgressNote[] @relation("CreatedByUser")
+  createdPrescriptions Prescription[] @relation("CreatedByUser")
+  createdResults       Result[]       @relation("CreatedByUser")
+  createdProblems      Problem[]      @relation("CreatedByUser")
+  auditLogs            AuditLog[]
+  reviewedResults      Result[]       @relation("UserReviewedResults")
+
+  // Unique constraint: one email per hospital
+  @@unique([email, hospitalId])
+  @@map("users")
+}
+
+// ================================
+// PATIENT MANAGEMENT
+// ================================
+
+model Patient {
+  id String @id @default(cuid())
+
+  // Basic Information
+  mrn              String // Medical Record Number - unique per hospital
+  firstName        String
+  lastName         String
+  dateOfBirth      DateTime
+  gender           String // M, F, O (Other)
+  phone            String?
+  email            String?
+  address          String?
+  emergencyContact String?
+  emergencyPhone   String?
+
+  // Insurance & Demographics
+  insuranceNumber   String?
+  insuranceProvider String?
+  occupation        String?
+  maritalStatus     String? // Single, Married, Divorced, Widowed
+
+  // Multi-tenant isolation
+  hospitalId String
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  // Audit trail
+  createdById String
+  createdBy   User   @relation("CreatedByUser", fields: [createdById], references: [id])
+
+  // Status
+  isActive Boolean @default(true)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  visits         Visit[]
+  medicalHistory MedicalHistory[]
+  problems       Problem[]
+
+  // Unique MRN per hospital
+  @@unique([mrn, hospitalId])
+  @@map("patients")
+}
+
+// ================================
+// VISIT MANAGEMENT
+// ================================
+
+enum VisitType {
+  EMERGENCY
+  CLINIC
+  FOLLOWUP
+  CONSULTATION
+}
+
+enum VisitStatus {
+  SCHEDULED
+  CHECKED_IN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model Visit {
+  id String @id @default(cuid())
+
+  // Visit Details
+  visitNumber    String // Unique visit identifier
+  type           VisitType
+  status         VisitStatus @default(SCHEDULED)
+  chiefComplaint String? // Main reason for visit
+
+  // Scheduling
+  scheduledAt DateTime?
+  checkedInAt DateTime?
+  completedAt DateTime?
+
+  // Multi-tenant isolation
+  hospitalId String
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  // Patient relationship
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  // Staff assignments
+  createdById  String
+  createdBy    User    @relation("CreatedByUser", fields: [createdById], references: [id])
+  assignedToId String? // Assigned doctor/nurse
+  assignedTo   User?   @relation("AssignedToUser", fields: [assignedToId], references: [id])
+
+  // Specialty
+  specialtyId String?
+  specialty   Specialty? @relation(fields: [specialtyId], references: [id])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations - All visit-related data
+  vitals        Vitals[]
+  clinicalNotes ClinicalNote[]
+  progressNotes ProgressNote[]
+  prescriptions Prescription[]
+  results       Result[]
+
+  // Unique visit number per hospital
+  @@unique([visitNumber, hospitalId])
+  @@map("visits")
+}
+
+// ================================
+// CLINICAL DATA
+// ================================
+
+model Vitals {
+  id String @id @default(cuid())
+
+  // Vital Signs
+  temperature      Float? // Celsius
+  bloodPressureSys Int? // Systolic
+  bloodPressureDia Int? // Diastolic
+  heartRate        Int? // BPM
+  respiratoryRate  Int? // Per minute
+  oxygenSaturation Float? // Percentage
+  weight           Float? // Kg
+  height           Float? // Cm
+  bmi              Float? // Calculated or manual
+
+  // Additional measurements
+  painScore Int? // 1-10 scale
+  notes     String?
+
+  // Multi-tenant isolation
+  hospitalId String
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  // Visit relationship
+  visitId String
+  visit   Visit  @relation(fields: [visitId], references: [id])
+
+  // Audit trail
+  createdById String
+  createdBy   User   @relation("CreatedByUser", fields: [createdById], references: [id])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("vitals")
+}
+
+model ClinicalNote {
+  id String @id @default(cuid())
+
+  // Note content
+  title    String?
+  content  String // Rich text/markdown supported
+  noteType String? // Assessment, Plan, History, etc.
+
+  // File attachments
+  attachments String[] // Array of file paths/URLs
+
+  // Multi-tenant isolation
+  hospitalId String
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  // Visit relationship
+  visitId String
+  visit   Visit  @relation(fields: [visitId], references: [id])
+
+  // Audit trail
+  createdById String
+  createdBy   User   @relation("CreatedByUser", fields: [createdById], references: [id])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("clinical_notes")
+}
+
+model ProgressNote {
+  id String @id @default(cuid())
+
+  // Note content
+  content   String
+  noteType  String? // Nursing note, Progress update, etc.
+  isPrivate Boolean @default(false) // Restrict access to certain roles
+
+  // File attachments
+  attachments String[] // Array of file paths/URLs
+
+  // Multi-tenant isolation  
+  hospitalId String
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  // Visit relationship
+  visitId String
+  visit   Visit  @relation(fields: [visitId], references: [id])
+
+  // Audit trail
+  createdById String
+  createdBy   User   @relation("CreatedByUser", fields: [createdById], references: [id])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("progress_notes")
+}
+
+// ================================
+// PRESCRIPTIONS & MEDICATIONS
+// ================================
+
+enum PrescriptionStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  ON_HOLD
+}
+
+model Prescription {
+  id String @id @default(cuid())
+
+  // Medication details
+  medicationName String
+  dosage         String // e.g., "500mg"
+  frequency      String // e.g., "twice daily"
+  duration       String // e.g., "7 days"
+  instructions   String? // Special instructions
+  quantity       Int? // Total quantity prescribed
+  refills        Int? // Number of refills allowed
+
+  // Status tracking
+  status    PrescriptionStatus @default(ACTIVE)
+  startDate DateTime?
+  endDate   DateTime?
+
+  // Multi-tenant isolation
+  hospitalId String
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  // Visit relationship
+  visitId String
+  visit   Visit  @relation(fields: [visitId], references: [id])
+
+  // Audit trail
+  createdById String
+  createdBy   User   @relation("CreatedByUser", fields: [createdById], references: [id])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("prescriptions")
+}
+
+// ================================
+// RESULTS & DIAGNOSTICS
+// ================================
+
+enum ResultType {
+  LAB
+  RADIOLOGY
+  ECG
+  PATHOLOGY
+  OTHER
+}
+
+enum ResultStatus {
+  PENDING
+  COMPLETED
+  REVIEWED
+  ABNORMAL
+}
+
+model Result {
+  id String @id @default(cuid())
+
+  // Result details
+  title       String
+  type        ResultType
+  status      ResultStatus @default(PENDING)
+  description String?
+  findings    String? // Detailed findings
+
+  // File attachments (PDFs, images, etc.)
+  files String[] // Array of file paths/URLs
+
+  // Reference values and flags
+  isAbnormal   Boolean @default(false)
+  criticalFlag Boolean @default(false)
+
+  // Multi-tenant isolation
+  hospitalId String
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  // Visit relationship
+  visitId String
+  visit   Visit  @relation(fields: [visitId], references: [id])
+
+  // Audit trail
+  createdById  String
+  createdBy    User      @relation("CreatedByUser", fields: [createdById], references: [id])
+  reviewedById String?
+  reviewedBy   User?     @relation("UserReviewedResults", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("results")
+}
+
+// ================================
+// MEDICAL HISTORY & PROBLEMS
+// ================================
+
+model MedicalHistory {
+  id String @id @default(cuid())
+
+  // History categories
+  allergies          String[] // Array of allergies
+  pastConditions     String[] // Previous medical conditions
+  currentMedications String[] // Current medications
+  surgicalHistory    String[] // Past surgeries
+  familyHistory      String[] // Family medical history
+  socialHistory      String? // Smoking, alcohol, etc.
+
+  // Multi-tenant isolation (through patient)
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("medical_history")
+}
+
+enum ProblemStatus {
+  ACTIVE
+  RESOLVED
+  CHRONIC
+  INACTIVE
+}
+
+model Problem {
+  id String @id @default(cuid())
+
+  // Problem details
+  title       String // Problem name/description
+  description String? // Detailed description
+  status      ProblemStatus @default(ACTIVE)
+  severity    String? // Mild, Moderate, Severe
+
+  // Dates
+  onsetDate    DateTime? // When problem started
+  resolvedDate DateTime? // When resolved (if applicable)
+
+  // Multi-tenant isolation
+  hospitalId String
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  // Patient relationship
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  // Audit trail
+  createdById String
+  createdBy   User   @relation("CreatedByUser", fields: [createdById], references: [id])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("problems")
+}
+
+// ================================
+// LOOKUP TABLES
+// ================================
+
+model Specialty {
+  id          String  @id @default(cuid())
+  name        String // e.g., "Cardiology", "Pediatrics"
+  description String?
+  isActive    Boolean @default(true)
+
+  // Multi-tenant isolation
+  hospitalId String
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  // Relations
+  visits Visit[]
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, hospitalId])
+  @@map("specialties")
+}
+
+// ================================
+// AUDIT & SECURITY
+// ================================
+
+enum AuditAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  EXPORT
+  PRINT
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  // Action details
+  action    AuditAction
+  entity    String // Table/model name
+  entityId  String? // ID of affected record
+  oldValues Json? // Previous values (for updates)
+  newValues Json? // New values
+
+  // Context
+  ipAddress String?
+  userAgent String?
+
+  // Multi-tenant isolation
+  hospitalId String
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  // User who performed action
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // Timestamp
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}

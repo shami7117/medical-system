@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { LogIn, Building2, Eye, EyeOff } from "lucide-react";
+import { useLogin } from "@/hooks/useAuth";
 
 interface FormData {
   email: string;
@@ -21,6 +22,7 @@ interface FormData {
 interface FormErrors {
   email?: string;
   password?: string;
+  general?: string;
 }
 
 export default function LoginPage() {
@@ -31,6 +33,8 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  const { mutate: login, isPending } = useLogin();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -72,13 +76,37 @@ export default function LoginPage() {
     }
 
     setIsLoading(true);
+    setErrors({}); // Clear previous errors if any
 
-    // Simulate API call
-    setTimeout(() => {
-      console.log("Login attempt:", formData);
+    try {
+      await login({
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+      });
+
+      // Simulate API delay for better UX or mock behavior
+      setTimeout(() => {
+        console.log("Login attempt:", formData);
+        setIsLoading(false);
+        // Handle successful login here (e.g., redirect, show success toast)
+      }, 1000);
+    } catch (error: any) {
+      console.error("Login failed:", error);
       setIsLoading(false);
-      // Handle successful login here
-    }, 1000);
+
+      // Display error to user
+      if (
+        error.response &&
+        error.response.data &&
+        error.response.data.message
+      ) {
+        setErrors({ general: error.response.data.message });
+      } else {
+        setErrors({
+          general: "An unexpected error occurred. Please try again.",
+        });
+      }
+    }
   };
 
   const togglePasswordVisibility = () => {

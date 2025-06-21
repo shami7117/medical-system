@@ -2,21 +2,13 @@
 
 import React, { useState } from "react";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import {
   UserPlus,
   Building2,
   ArrowLeft,
   ArrowRight,
   Check,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 
 interface HospitalData {
@@ -25,6 +17,7 @@ interface HospitalData {
   address: string;
   phone: string;
   email: string;
+  hospitalWebsite?: string;
   adminName: string;
   adminEmail: string;
   adminPassword: string;
@@ -37,27 +30,81 @@ interface FormErrors {
   address?: string;
   phone?: string;
   email?: string;
+  hospitalWebsite?: string;
   adminName?: string;
   adminEmail?: string;
   adminPassword?: string;
   adminEmployeeId?: string;
 }
 
+interface RegistrationResponse {
+  token: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    employeeId: string;
+    hospital: {
+      id: string;
+      name: string;
+      email: string;
+    };
+  };
+}
+
+// API function to register hospital
+const registerHospital = async (
+  data: HospitalData
+): Promise<RegistrationResponse> => {
+  const response = await fetch("/api/auth/register", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      hospitalName: data.hospitalName,
+      hospitalCode: data.hospitalCode,
+      hospitalAddress: data.address,
+      hospitalPhone: data.phone,
+      hospitalEmail: data.email,
+      hospitalWebsite: data.hospitalWebsite,
+      adminName: data.adminName,
+      adminEmail: data.adminEmail,
+      adminPassword: data.adminPassword,
+      adminEmployeeId: data.adminEmployeeId,
+    }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Registration failed");
+  }
+
+  return result.data;
+};
+
 export default function MultiTenantSignupPage() {
   const [currentStep, setCurrentStep] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<HospitalData>({
     hospitalName: "",
     hospitalCode: "",
     address: "",
     phone: "",
     email: "",
+    hospitalWebsite: "",
     adminName: "",
     adminEmail: "",
     adminPassword: "",
     adminEmployeeId: "",
   });
   const [errors, setErrors] = useState<FormErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [apiError, setApiError] = useState<string>("");
+  const [successMessage, setSuccessMessage] = useState<string>("");
+  const [registrationData, setRegistrationData] =
+    useState<RegistrationResponse | null>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -65,12 +112,18 @@ export default function MultiTenantSignupPage() {
       ...prev,
       [name]: value,
     }));
+
     // Clear error when user starts typing
     if (errors[name as keyof FormErrors]) {
       setErrors((prev) => ({
         ...prev,
         [name]: "",
       }));
+    }
+
+    // Clear API error when user makes changes
+    if (apiError) {
+      setApiError("");
     }
   };
 
@@ -103,6 +156,13 @@ export default function MultiTenantSignupPage() {
       newErrors.email = "Please enter a valid email address";
     }
 
+    // Optional website validation
+    if (formData.hospitalWebsite && formData.hospitalWebsite.trim()) {
+      if (!/^https?:\/\/.+\..+/.test(formData.hospitalWebsite)) {
+        newErrors.hospitalWebsite = "Please enter a valid website URL";
+      }
+    }
+
     return newErrors;
   };
 
@@ -121,8 +181,8 @@ export default function MultiTenantSignupPage() {
 
     if (!formData.adminPassword) {
       newErrors.adminPassword = "Password is required";
-    } else if (formData.adminPassword.length < 6) {
-      newErrors.adminPassword = "Password must be at least 6 characters";
+    } else if (formData.adminPassword.length < 8) {
+      newErrors.adminPassword = "Password must be at least 8 characters";
     }
 
     if (!formData.adminEmployeeId.trim()) {
@@ -132,20 +192,37 @@ export default function MultiTenantSignupPage() {
     return newErrors;
   };
 
+  const showNotification = (
+    message: string,
+    type: "success" | "error" = "success"
+  ) => {
+    if (type === "success") {
+      setSuccessMessage(message);
+      setApiError("");
+    } else {
+      setApiError(message);
+      setSuccessMessage("");
+    }
+  };
+
   const handleNext = () => {
     const newErrors = validateStep1();
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
+      showNotification("Please fix the errors before proceeding", "error");
       return;
     }
 
     setErrors({});
     setCurrentStep(2);
+    showNotification("Step 1 completed successfully!", "success");
   };
 
   const handleBack = () => {
     setCurrentStep(1);
+    setApiError("");
+    setSuccessMessage("");
   };
 
   const handleSubmit = async () => {
@@ -153,44 +230,105 @@ export default function MultiTenantSignupPage() {
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
+      showNotification("Please fix the errors before submitting", "error");
       return;
     }
 
-    setIsSubmitting(true);
+    setErrors({});
+    setIsLoading(true);
+    setApiError("");
+    setSuccessMessage("");
 
-    // Simulate API call
-    setTimeout(() => {
-      console.log("Hospital registration submitted:", formData);
-      setIsSubmitting(false);
+    try {
+      const result = await registerHospital(formData);
+
+      // Store authentication data
+      localStorage.setItem("auth_token", result.token);
+      localStorage.setItem("user_data", JSON.stringify(result.user));
+
+      setRegistrationData(result);
       setCurrentStep(3);
-    }, 2000);
+      showNotification("Hospital registered successfully!", "success");
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Registration failed. Please try again.";
+      showNotification(errorMessage, "error");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
+  const handleLoginRedirect = () => {
+    window.location.href = "/dashboard";
+  };
+
+  // Notification Component
+  const Notification = ({
+    message,
+    type,
+  }: {
+    message: string;
+    type: "success" | "error";
+  }) => {
+    if (!message) return null;
+
+    return (
+      <div
+        className={`p-4 rounded-lg flex items-center gap-2 mb-4 ${
+          type === "success"
+            ? "bg-green-50 border border-green-200 text-green-800"
+            : "bg-red-50 border border-red-200 text-red-800"
+        }`}
+      >
+        {type === "success" ? (
+          <Check className="h-4 w-4 text-green-600" />
+        ) : (
+          <AlertCircle className="h-4 w-4 text-red-600" />
+        )}
+        <span className="text-sm">{message}</span>
+      </div>
+    );
+  };
+
+  // Move renderStep1, renderStep2, renderStep3 inside the component
   const renderStep1 = () => (
-    <>
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold text-center flex items-center justify-center gap-2">
+    <div className="bg-white rounded-lg shadow-xl border-0">
+      <div className="p-6 pb-0">
+        <h2 className="text-2xl font-bold text-center flex items-center justify-center gap-2 mb-2">
           <Building2 className="h-5 w-5" />
           Hospital Registration
-        </CardTitle>
-        <CardDescription className="text-center">
+        </h2>
+        <p className="text-center text-gray-600 mb-6">
           Step 1 of 2: Hospital Information
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </p>
+      </div>
+      <div className="p-6">
+        <Notification message={apiError} type="error" />
+        <Notification message={successMessage} type="success" />
+
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="hospitalName">Hospital Name</Label>
-            <Input
+            <label
+              htmlFor="hospitalName"
+              className="text-sm font-medium text-gray-700"
+            >
+              Hospital Name
+            </label>
+            <input
               id="hospitalName"
               name="hospitalName"
               type="text"
               placeholder="Enter hospital name"
               value={formData.hospitalName}
               onChange={handleInputChange}
-              className={
-                errors.hospitalName ? "border-red-500 focus:ring-red-500" : ""
-              }
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.hospitalName
+                  ? "border-red-500 focus:ring-red-500"
+                  : "border-gray-300"
+              }`}
+              disabled={isLoading}
             />
             {errors.hospitalName && (
               <p className="text-sm text-red-600">{errors.hospitalName}</p>
@@ -198,17 +336,25 @@ export default function MultiTenantSignupPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="hospitalCode">Hospital Code</Label>
-            <Input
+            <label
+              htmlFor="hospitalCode"
+              className="text-sm font-medium text-gray-700"
+            >
+              Hospital Code
+            </label>
+            <input
               id="hospitalCode"
               name="hospitalCode"
               type="text"
               placeholder="Unique hospital identifier (e.g., MFH001)"
               value={formData.hospitalCode}
               onChange={handleInputChange}
-              className={
-                errors.hospitalCode ? "border-red-500 focus:ring-red-500" : ""
-              }
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.hospitalCode
+                  ? "border-red-500 focus:ring-red-500"
+                  : "border-gray-300"
+              }`}
+              disabled={isLoading}
             />
             {errors.hospitalCode && (
               <p className="text-sm text-red-600">{errors.hospitalCode}</p>
@@ -216,17 +362,25 @@ export default function MultiTenantSignupPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="address">Hospital Address</Label>
-            <Input
+            <label
+              htmlFor="address"
+              className="text-sm font-medium text-gray-700"
+            >
+              Hospital Address
+            </label>
+            <input
               id="address"
               name="address"
               type="text"
               placeholder="Enter complete hospital address"
               value={formData.address}
               onChange={handleInputChange}
-              className={
-                errors.address ? "border-red-500 focus:ring-red-500" : ""
-              }
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.address
+                  ? "border-red-500 focus:ring-red-500"
+                  : "border-gray-300"
+              }`}
+              disabled={isLoading}
             />
             {errors.address && (
               <p className="text-sm text-red-600">{errors.address}</p>
@@ -234,17 +388,25 @@ export default function MultiTenantSignupPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="phone">Phone Number</Label>
-            <Input
+            <label
+              htmlFor="phone"
+              className="text-sm font-medium text-gray-700"
+            >
+              Phone Number
+            </label>
+            <input
               id="phone"
               name="phone"
               type="tel"
               placeholder="Hospital contact number"
               value={formData.phone}
               onChange={handleInputChange}
-              className={
-                errors.phone ? "border-red-500 focus:ring-red-500" : ""
-              }
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.phone
+                  ? "border-red-500 focus:ring-red-500"
+                  : "border-gray-300"
+              }`}
+              disabled={isLoading}
             />
             {errors.phone && (
               <p className="text-sm text-red-600">{errors.phone}</p>
@@ -252,59 +414,105 @@ export default function MultiTenantSignupPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email">Hospital Email</Label>
-            <Input
+            <label
+              htmlFor="email"
+              className="text-sm font-medium text-gray-700"
+            >
+              Hospital Email
+            </label>
+            <input
               id="email"
               name="email"
               type="email"
               placeholder="Official hospital email"
               value={formData.email}
               onChange={handleInputChange}
-              className={
-                errors.email ? "border-red-500 focus:ring-red-500" : ""
-              }
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.email
+                  ? "border-red-500 focus:ring-red-500"
+                  : "border-gray-300"
+              }`}
+              disabled={isLoading}
             />
             {errors.email && (
               <p className="text-sm text-red-600">{errors.email}</p>
             )}
           </div>
 
-          <Button
+          <div className="space-y-2">
+            <label
+              htmlFor="hospitalWebsite"
+              className="text-sm font-medium text-gray-700"
+            >
+              Hospital Website (Optional)
+            </label>
+            <input
+              id="hospitalWebsite"
+              name="hospitalWebsite"
+              type="url"
+              placeholder="https://www.hospital.com"
+              value={formData.hospitalWebsite}
+              onChange={handleInputChange}
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.hospitalWebsite
+                  ? "border-red-500 focus:ring-red-500"
+                  : "border-gray-300"
+              }`}
+              disabled={isLoading}
+            />
+            {errors.hospitalWebsite && (
+              <p className="text-sm text-red-600">{errors.hospitalWebsite}</p>
+            )}
+          </div>
+
+          <button
             onClick={handleNext}
-            className="w-full bg-blue-600 hover:bg-blue-700 transition-colors"
+            disabled={isLoading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Next <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
+            Next <ArrowRight className="h-4 w-4" />
+          </button>
         </div>
-      </CardContent>
-    </>
+      </div>
+    </div>
   );
 
   const renderStep2 = () => (
-    <>
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold text-center flex items-center justify-center gap-2">
+    <div className="bg-white rounded-lg shadow-xl border-0">
+      <div className="p-6 pb-0">
+        <h2 className="text-2xl font-bold text-center flex items-center justify-center gap-2 mb-2">
           <UserPlus className="h-5 w-5" />
           Admin Account Setup
-        </CardTitle>
-        <CardDescription className="text-center">
+        </h2>
+        <p className="text-center text-gray-600 mb-6">
           Step 2 of 2: Hospital Administrator Details
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </p>
+      </div>
+      <div className="p-6">
+        <Notification message={apiError} type="error" />
+        <Notification message={successMessage} type="success" />
+
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="adminName">Administrator Name</Label>
-            <Input
+            <label
+              htmlFor="adminName"
+              className="text-sm font-medium text-gray-700"
+            >
+              Administrator Name
+            </label>
+            <input
               id="adminName"
               name="adminName"
               type="text"
               placeholder="Enter admin's full name"
               value={formData.adminName}
               onChange={handleInputChange}
-              className={
-                errors.adminName ? "border-red-500 focus:ring-red-500" : ""
-              }
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.adminName
+                  ? "border-red-500 focus:ring-red-500"
+                  : "border-gray-300"
+              }`}
+              disabled={isLoading}
             />
             {errors.adminName && (
               <p className="text-sm text-red-600">{errors.adminName}</p>
@@ -312,17 +520,25 @@ export default function MultiTenantSignupPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="adminEmail">Administrator Email</Label>
-            <Input
+            <label
+              htmlFor="adminEmail"
+              className="text-sm font-medium text-gray-700"
+            >
+              Administrator Email
+            </label>
+            <input
               id="adminEmail"
               name="adminEmail"
               type="email"
               placeholder="Admin's email address"
               value={formData.adminEmail}
               onChange={handleInputChange}
-              className={
-                errors.adminEmail ? "border-red-500 focus:ring-red-500" : ""
-              }
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.adminEmail
+                  ? "border-red-500 focus:ring-red-500"
+                  : "border-gray-300"
+              }`}
+              disabled={isLoading}
             />
             {errors.adminEmail && (
               <p className="text-sm text-red-600">{errors.adminEmail}</p>
@@ -330,17 +546,25 @@ export default function MultiTenantSignupPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="adminPassword">Password</Label>
-            <Input
+            <label
+              htmlFor="adminPassword"
+              className="text-sm font-medium text-gray-700"
+            >
+              Password
+            </label>
+            <input
               id="adminPassword"
               name="adminPassword"
               type="password"
-              placeholder="Create a secure password"
+              placeholder="Create a secure password (min 8 characters)"
               value={formData.adminPassword}
               onChange={handleInputChange}
-              className={
-                errors.adminPassword ? "border-red-500 focus:ring-red-500" : ""
-              }
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.adminPassword
+                  ? "border-red-500 focus:ring-red-500"
+                  : "border-gray-300"
+              }`}
+              disabled={isLoading}
             />
             {errors.adminPassword && (
               <p className="text-sm text-red-600">{errors.adminPassword}</p>
@@ -348,19 +572,25 @@ export default function MultiTenantSignupPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="adminEmployeeId">Employee ID</Label>
-            <Input
+            <label
+              htmlFor="adminEmployeeId"
+              className="text-sm font-medium text-gray-700"
+            >
+              Employee ID
+            </label>
+            <input
               id="adminEmployeeId"
               name="adminEmployeeId"
               type="text"
               placeholder="Administrator's employee ID"
               value={formData.adminEmployeeId}
               onChange={handleInputChange}
-              className={
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 errors.adminEmployeeId
                   ? "border-red-500 focus:ring-red-500"
-                  : ""
-              }
+                  : "border-gray-300"
+              }`}
+              disabled={isLoading}
             />
             {errors.adminEmployeeId && (
               <p className="text-sm text-red-600">{errors.adminEmployeeId}</p>
@@ -368,55 +598,100 @@ export default function MultiTenantSignupPage() {
           </div>
 
           <div className="flex gap-3">
-            <Button onClick={handleBack} variant="outline" className="flex-1">
-              <ArrowLeft className="mr-2 h-4 w-4" /> Back
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 transition-colors"
+            <button
+              onClick={handleBack}
+              className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded-md hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isLoading}
             >
-              {isSubmitting ? "Creating Account..." : "Create Hospital Account"}
-            </Button>
+              <ArrowLeft className="h-4 w-4" /> Back
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isLoading}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating Account...
+                </>
+              ) : (
+                "Create Hospital Account"
+              )}
+            </button>
           </div>
         </div>
-      </CardContent>
-    </>
+      </div>
+    </div>
   );
 
   const renderStep3 = () => (
-    <>
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold text-center flex items-center justify-center gap-2 text-green-600">
+    <div className="bg-white rounded-lg shadow-xl border-0">
+      <div className="p-6 pb-0">
+        <h2 className="text-2xl font-bold text-center flex items-center justify-center gap-2 text-green-600 mb-2">
           <Check className="h-6 w-6" />
           Registration Successful!
-        </CardTitle>
-        <CardDescription className="text-center">
+        </h2>
+        <p className="text-center text-gray-600 mb-6">
           Your hospital has been registered successfully
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </p>
+      </div>
+      <div className="p-6">
         <div className="text-center space-y-4">
-          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-            <h3 className="font-semibold text-green-800 mb-2">What's Next?</h3>
-            <p className="text-sm text-green-700">
-              Your registration is under review. You'll receive an email
-              confirmation once approved. Hospital Code:{" "}
-              <strong>{formData.hospitalCode}</strong>
-            </p>
+          <div className="p-4 rounded-lg bg-green-50 border border-green-200">
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <Check className="h-5 w-5 text-green-600" />
+              <h3 className="font-semibold text-green-800">
+                Welcome to Segai Hospital System!
+              </h3>
+            </div>
+            <div className="space-y-2 text-sm text-green-700">
+              <p>
+                Your hospital <strong>{formData.hospitalName}</strong> has been
+                registered successfully!
+              </p>
+              <p>
+                Hospital Code:{" "}
+                <strong className="bg-green-100 px-2 py-1 rounded">
+                  {formData.hospitalCode}
+                </strong>
+              </p>
+              {registrationData && (
+                <p>
+                  Administrator: <strong>{registrationData.user.name}</strong> (
+                  {registrationData.user.email})
+                </p>
+              )}
+              <p className="mt-3">
+                Default specialties have been created and you can now start
+                managing your outpatient system.
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Button
-              onClick={() => (window.location.href = "/login")}
-              className="w-full bg-blue-600 hover:bg-blue-700 transition-colors"
+          <div className="space-y-3">
+            <button
+              onClick={handleLoginRedirect}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-md transition-colors"
             >
-              Go to Login
-            </Button>
+              Continue to Dashboard
+            </button>
+
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-800">
+                <strong>Next Steps:</strong>
+              </p>
+              <ul className="text-xs text-blue-700 mt-1 space-y-1">
+                <li>• Complete your hospital profile</li>
+                <li>• Add doctors and staff members</li>
+                <li>• Configure appointment slots</li>
+                <li>• Start managing patient appointments</li>
+              </ul>
+            </div>
           </div>
         </div>
-      </CardContent>
-    </>
+      </div>
+    </div>
   );
 
   return (
@@ -439,7 +714,7 @@ export default function MultiTenantSignupPage() {
           <div className="mb-6">
             <div className="flex items-center justify-center space-x-4">
               <div
-                className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
+                className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold transition-colors ${
                   currentStep >= 1
                     ? "bg-blue-600 text-white"
                     : "bg-gray-200 text-gray-500"
@@ -448,12 +723,12 @@ export default function MultiTenantSignupPage() {
                 1
               </div>
               <div
-                className={`h-1 w-12 ${
+                className={`h-1 w-12 transition-colors ${
                   currentStep >= 2 ? "bg-blue-600" : "bg-gray-200"
                 }`}
               ></div>
               <div
-                className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
+                className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold transition-colors ${
                   currentStep >= 2
                     ? "bg-blue-600 text-white"
                     : "bg-gray-200 text-gray-500"
@@ -462,15 +737,34 @@ export default function MultiTenantSignupPage() {
                 2
               </div>
             </div>
+            <div className="flex justify-between mt-2 text-xs text-gray-600">
+              <span>Hospital Info</span>
+              <span>Admin Setup</span>
+            </div>
           </div>
         )}
 
-        <Card className="shadow-xl border-0">
-          {currentStep === 1 && renderStep1()}
-          {currentStep === 2 && renderStep2()}
-          {currentStep === 3 && renderStep3()}
-        </Card>
+        {/* Loading Overlay */}
+        {isLoading && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 flex flex-col items-center space-y-4">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              <p className="text-gray-700 font-medium">
+                Creating your hospital account...
+              </p>
+              <p className="text-sm text-gray-500">
+                This may take a few moments
+              </p>
+            </div>
+          </div>
+        )}
 
+        {/* Step Content */}
+        {currentStep === 1 && renderStep1()}
+        {currentStep === 2 && renderStep2()}
+        {currentStep === 3 && renderStep3()}
+
+        {/* Login Link */}
         {currentStep < 3 && (
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
@@ -485,6 +779,7 @@ export default function MultiTenantSignupPage() {
           </div>
         )}
 
+        {/* Footer */}
         <div className="mt-8 text-center text-xs text-gray-500">
           <p>© 2025 Segai Hospital. All rights reserved.</p>
         </div>
