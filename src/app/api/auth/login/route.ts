@@ -1,16 +1,19 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyPassword } from '@/lib/password'
 import { signJWT } from '@/lib/jwt'
-import { successResponse, errorResponse } from '@/lib/api-response'
 
+// POST /api/auth/login
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { email, password } = body
 
     if (!email || !password) {
-      return errorResponse('Email and password are required')
+      return NextResponse.json(
+        { message: 'Email and password are required' },
+        { status: 400 }
+      )
     }
 
     // Find user with hospital data
@@ -25,28 +28,35 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
-      return errorResponse('Invalid email or password', 401)
+      return NextResponse.json(
+        { message: 'Invalid email or password' },
+        { status: 401 }
+      )
     }
 
-    // Check if hospital is active
     if (!user.hospital.isActive) {
-      return errorResponse('Hospital account is inactive', 403)
+      return NextResponse.json(
+        { message: 'Hospital account is inactive' },
+        { status: 403 }
+      )
     }
 
-    // Verify password
     const isValidPassword = await verifyPassword(password, user.passwordHash)
 
     if (!isValidPassword) {
-      return errorResponse('Invalid email or password', 401)
+      return NextResponse.json(
+        { message: 'Invalid email or password' },
+        { status: 401 }
+      )
     }
 
-    // Update last login
+    // Update last login timestamp
     await prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     })
 
-    // Log login
+    // Log login event
     await prisma.auditLog.create({
       data: {
         action: 'LOGIN',
@@ -59,7 +69,7 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    // Generate JWT token (now async)
+    // Generate JWT
     const token = await signJWT({
       userId: user.id,
       hospitalId: user.hospitalId,
@@ -67,24 +77,27 @@ export async function POST(request: NextRequest) {
       email: user.email,
     })
 
-    // Create response with user data
-    const response = successResponse({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        employeeId: user.employeeId,
-        hospital: {
-          id: user.hospital.id,
-          name: user.hospital.name,
-          email: user.hospital.email,
+    // Create response
+    const response = NextResponse.json(
+      {
+        message: 'Login successful',
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          employeeId: user.employeeId,
+          hospital: {
+            id: user.hospital.id,
+            name: user.hospital.name,
+            email: user.hospital.email,
+          },
         },
-      },
-    }, 'Login successful')
+      }
+    )
 
-    // Set the authentication cookie
+    // Set cookie
     response.cookies.set('hospital_auth_token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -97,6 +110,9 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Login error:', error)
-    return errorResponse('Login failed. Please try again.', 500)
+    return NextResponse.json(
+      { message: 'Login failed. Please try again.' },
+      { status: 500 }
+    )
   }
 }
