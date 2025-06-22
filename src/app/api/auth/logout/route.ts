@@ -5,6 +5,7 @@ import { successResponse, errorResponse } from '@/lib/api-response'
 
 export async function POST(request: NextRequest) {
   try {
+    
     const { user, error } = await withAuth(request)
 
     // if (error || !user) {

@@ -8,10 +8,10 @@ import { UserRole } from '@prisma/client'
 // GET - List all users in the hospital
 export async function GET(
   request: NextRequest,
-  { params }: { params: { hospitalId: string } }
+  context: any
 ) {
   try {
-    const auth = await authorizeHospitalAccess(request, params.hospitalId, ['ADMIN'])
+    const auth = await authorizeHospitalAccess(request, context.params.hospitalId, ['ADMIN'])
 
     if (!auth.authorized) {
       return auth.response
@@ -27,7 +27,7 @@ export async function GET(
 
     // Build where clause
     const where: any = {
-      hospitalId: params.hospitalId,
+      hospitalId: context.params.hospitalId,
     }
 
     if (role) {
@@ -84,10 +84,10 @@ export async function GET(
 // POST - Create new user
 export async function POST(
   request: NextRequest,
-  { params }: { params: { hospitalId: string } }
+  context: any
 ) {
   try {
-    const auth = await authorizeHospitalAccess(request, params.hospitalId, ['ADMIN'])
+    const auth = await authorizeHospitalAccess(request, context.params.hospitalId, ['ADMIN'])
 
     if (!auth.authorized) {
       return auth.response
@@ -114,7 +114,7 @@ export async function POST(
     const existingUser = await prisma.user.findFirst({
       where: {
         email: email.toLowerCase(),
-        hospitalId: params.hospitalId,
+        hospitalId: context.params.hospitalId,
       },
     })
 
@@ -127,7 +127,7 @@ export async function POST(
       const existingEmployeeId = await prisma.user.findFirst({
         where: {
           employeeId,
-          hospitalId: params.hospitalId,
+          hospitalId: context.params.hospitalId,
         },
       })
 
@@ -148,7 +148,7 @@ export async function POST(
         employeeId,
         phone,
         role,
-        hospitalId: params.hospitalId,
+        hospitalId: context.params.hospitalId,
         isActive: true,
       },
       select: {
@@ -174,7 +174,7 @@ export async function POST(
           email: newUser.email,
           role: newUser.role,
         },
-        hospitalId: params.hospitalId,
+        hospitalId: context.params.hospitalId,
         userId: auth.user.id,
         ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
         userAgent: request.headers.get('user-agent') || 'unknown',

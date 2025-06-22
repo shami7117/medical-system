@@ -3,28 +3,29 @@ import { authorizeHospitalAccess } from '@/lib/auth-helpers'
 import { prisma } from '@/lib/db'
 import { successResponse, errorResponse } from '@/lib/api-response'
 
-// GET - List all patients in the hospital
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { hospitalId: string } }
-) {
-  try {
-    const auth = await authorizeHospitalAccess(request, params.hospitalId)
+// Helper to extract dynamic route param
+function extractHospitalIdFromUrl(request: NextRequest): string | null {
+  const match = request.nextUrl.pathname.match(/\/hospitals\/([^/]+)\/patients/)
+  return match ? match[1] : null
+}
 
-    if (!auth.authorized) {
-      return auth.response
-    }
+// GET - List all patients in the hospital
+export async function GET(request: NextRequest) {
+  try {
+    const hospitalId = extractHospitalIdFromUrl(request)
+    if (!hospitalId) return errorResponse('Invalid hospital ID', 400)
+
+    const auth = await authorizeHospitalAccess(request, hospitalId)
+    if (!auth.authorized) return auth.response
 
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
     const search = searchParams.get('search')
-
     const skip = (page - 1) * limit
 
-    // Build where clause
     const where: any = {
-      hospitalId: params.hospitalId,
+      hospitalId,
       isActive: true,
     }
 
@@ -38,7 +39,6 @@ export async function GET(
       ]
     }
 
-    // Get patients with pagination
     const [patients, total] = await Promise.all([
       prisma.patient.findMany({
         where,
@@ -88,7 +88,6 @@ export async function GET(
         pages: Math.ceil(total / limit),
       },
     })
-
   } catch (error) {
     console.error('Get patients error:', error)
     return errorResponse('Failed to get patients', 500)
@@ -96,16 +95,13 @@ export async function GET(
 }
 
 // POST - Create new patient
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { hospitalId: string } }
-) {
+export async function POST(request: NextRequest) {
   try {
-    const auth = await authorizeHospitalAccess(request, params.hospitalId, ['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'])
+    const hospitalId = extractHospitalIdFromUrl(request)
+    if (!hospitalId) return errorResponse('Invalid hospital ID', 400)
 
-    if (!auth.authorized) {
-      return auth.response
-    }
+    const auth = await authorizeHospitalAccess(request, hospitalId, ['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'])
+    if (!auth.authorized) return auth.response
 
     const body = await request.json()
     const {
@@ -125,7 +121,6 @@ export async function POST(
       maritalStatus,
     } = body
 
-    // Validation
     if (!mrn || !firstName || !lastName || !dateOfBirth || !gender) {
       return errorResponse('MRN, first name, last name, date of birth, and gender are required')
     }
@@ -135,11 +130,10 @@ export async function POST(
       return errorResponse('Gender must be M, F, or O')
     }
 
-    // Check if MRN already exists in this hospital
     const existingPatient = await prisma.patient.findFirst({
       where: {
         mrn,
-        hospitalId: params.hospitalId,
+        hospitalId,
       },
     })
 
@@ -147,7 +141,6 @@ export async function POST(
       return errorResponse('Patient with this MRN already exists')
     }
 
-    // Create patient
     const newPatient = await prisma.patient.create({
       data: {
         mrn,
@@ -164,7 +157,7 @@ export async function POST(
         insuranceProvider,
         occupation,
         maritalStatus,
-        hospitalId: params.hospitalId,
+        hospitalId,
         createdById: auth.user.id,
         isActive: true,
       },
@@ -185,7 +178,6 @@ export async function POST(
       },
     })
 
-    // Log patient creation
     await prisma.auditLog.create({
       data: {
         action: 'CREATE',
@@ -195,7 +187,7 @@ export async function POST(
           mrn: newPatient.mrn,
           name: `${newPatient.firstName} ${newPatient.lastName}`,
         },
-        hospitalId: params.hospitalId,
+        hospitalId,
         userId: auth.user.id,
         ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
         userAgent: request.headers.get('user-agent') || 'unknown',

@@ -7,10 +7,10 @@ import { VisitType, VisitStatus } from '@prisma/client'
 // GET - List all visits in the hospital
 export async function GET(
   request: NextRequest,
-  { params }: { params: { hospitalId: string } }
+  context: any
 ) {
   try {
-    const auth = await authorizeHospitalAccess(request, params.hospitalId)
+    const auth = await authorizeHospitalAccess(request, context.params.hospitalId)
 
     if (!auth.authorized) {
       return auth.response
@@ -29,7 +29,7 @@ export async function GET(
 
     // Build where clause
     const where: any = {
-      hospitalId: params.hospitalId,
+      hospitalId: context.params.hospitalId,
     }
 
     if (patientId) {
@@ -143,10 +143,10 @@ export async function GET(
 // POST - Create new visit
 export async function POST(
   request: NextRequest,
-  { params }: { params: { hospitalId: string } }
+  context: any
 ) {
   try {
-    const auth = await authorizeHospitalAccess(request, params.hospitalId, ['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'])
+    const auth = await authorizeHospitalAccess(request, context.params.hospitalId, ['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST'])
 
     if (!auth.authorized) {
       return auth.response
@@ -176,7 +176,7 @@ export async function POST(
     const patient = await prisma.patient.findFirst({
       where: {
         id: patientId,
-        hospitalId: params.hospitalId,
+        hospitalId: context.params.hospitalId,
         isActive: true,
       },
     })
@@ -190,7 +190,7 @@ export async function POST(
       const assignedUser = await prisma.user.findFirst({
         where: {
           id: assignedToId,
-          hospitalId: params.hospitalId,
+          hospitalId: context.params.hospitalId,
           isActive: true,
         },
       })
@@ -205,7 +205,7 @@ export async function POST(
       const specialty = await prisma.specialty.findFirst({
         where: {
           id: specialtyId,
-          hospitalId: params.hospitalId,
+          hospitalId: context.params.hospitalId,
           isActive: true,
         },
       })
@@ -217,7 +217,7 @@ export async function POST(
 
     // Generate unique visit number
     const visitCount = await prisma.visit.count({
-      where: { hospitalId: params.hospitalId },
+      where: { hospitalId: context.params.hospitalId },
     })
     const visitNumber = `V${Date.now()}-${(visitCount + 1).toString().padStart(4, '0')}`
 
@@ -229,7 +229,7 @@ export async function POST(
         chiefComplaint,
         scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
         status: 'SCHEDULED',
-        hospitalId: params.hospitalId,
+        hospitalId: context.params.hospitalId,
         patientId,
         createdById: auth.user.id,
         assignedToId,
@@ -272,7 +272,7 @@ export async function POST(
           patientName: `${newVisit.patient.firstName} ${newVisit.patient.lastName}`,
           type: newVisit.type,
         },
-        hospitalId: params.hospitalId,
+        hospitalId: context.params.hospitalId,
         userId: auth.user.id,
         ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
         userAgent: request.headers.get('user-agent') || 'unknown',

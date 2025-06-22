@@ -1,16 +1,14 @@
 import { NextRequest } from 'next/server'
-import { authenticateRequest } from '@/lib/auth-middleware'
+import { withAuth } from '@/lib/auth-middleware'
 import { successResponse, errorResponse } from '@/lib/api-response'
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await authenticateRequest(request)
+    const { user, error } = await withAuth(request)
 
-    if (!auth) {
-      return errorResponse('Unauthorized', 401)
+    if (error || !user) {
+      return error || errorResponse('Unauthorized', 401)
     }
-
-    const { user } = auth
 
     return successResponse({
       user: {
@@ -19,11 +17,11 @@ export async function GET(request: NextRequest) {
         email: user.email,
         role: user.role,
         employeeId: user.employeeId,
-        hospital: {
+        hospital: user.hospital ? {
           id: user.hospital.id,
           name: user.hospital.name,
           email: user.hospital.email,
-        },
+        } : undefined,
       },
     })
 

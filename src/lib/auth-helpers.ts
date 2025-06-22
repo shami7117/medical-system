@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { authenticateRequest } from './auth-middleware'
+import { withAuth } from './auth-middleware'
 import { errorResponse } from './api-response'
 import { UserRole } from '@prisma/client'
 
@@ -8,16 +8,14 @@ export async function authorizeHospitalAccess(
   hospitalId: string,
   requiredRoles?: UserRole[]
 ) {
-  const auth = await authenticateRequest(request)
+  const { user, error } = await withAuth(request)
 
-  if (!auth) {
+  if (error || !user) {
     return { authorized: false, response: errorResponse('Unauthorized', 401) }
   }
 
-  const { user, payload } = auth
-
   // Check if user belongs to the requested hospital
-  if (payload.hospitalId !== hospitalId) {
+  if (user.hospitalId !== hospitalId) {
     return { authorized: false, response: errorResponse('Access denied to this hospital', 403) }
   }
 
@@ -26,5 +24,5 @@ export async function authorizeHospitalAccess(
     return { authorized: false, response: errorResponse('Insufficient permissions', 403) }
   }
 
-  return { authorized: true, user, payload }
+  return { authorized: true, user }
 }

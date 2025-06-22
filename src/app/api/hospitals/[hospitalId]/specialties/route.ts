@@ -6,10 +6,10 @@ import { successResponse, errorResponse } from '@/lib/api-response'
 // GET - List all specialties in the hospital
 export async function GET(
   request: NextRequest,
-  { params }: { params: { hospitalId: string } }
+  context: any
 ) {
   try {
-    const auth = await authorizeHospitalAccess(request, params.hospitalId)
+    const auth = await authorizeHospitalAccess(request, context.params.hospitalId)
 
     if (!auth.authorized) {
       return auth.response
@@ -19,7 +19,7 @@ export async function GET(
     const includeInactive = searchParams.get('includeInactive') === 'true'
 
     const where: any = {
-      hospitalId: params.hospitalId,
+      hospitalId: context.params.hospitalId,
     }
 
     if (!includeInactive) {
@@ -62,10 +62,10 @@ export async function GET(
 // POST - Create new specialty
 export async function POST(
   request: NextRequest,
-  { params }: { params: { hospitalId: string } }
+  context: any
 ) {
   try {
-    const auth = await authorizeHospitalAccess(request, params.hospitalId, ['ADMIN'])
+    const auth = await authorizeHospitalAccess(request, context.params.hospitalId, ['ADMIN'])
 
     if (!auth.authorized) {
       return auth.response
@@ -83,7 +83,7 @@ export async function POST(
     const existingSpecialty = await prisma.specialty.findFirst({
       where: {
         name: name.trim(),
-        hospitalId: params.hospitalId,
+        hospitalId: context.params.hospitalId,
       },
     })
 
@@ -96,7 +96,7 @@ export async function POST(
       data: {
         name: name.trim(),
         description: description?.trim(),
-        hospitalId: params.hospitalId,
+        hospitalId: context.params.hospitalId,
         isActive: true,
       },
       select: {
@@ -118,7 +118,7 @@ export async function POST(
           name: newSpecialty.name,
           description: newSpecialty.description,
         },
-        hospitalId: params.hospitalId,
+        hospitalId: context.params.hospitalId,
         userId: auth.user.id,
         ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
         userAgent: request.headers.get('user-agent') || 'unknown',
