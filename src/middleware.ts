@@ -5,7 +5,8 @@ import { verifyJWT } from '@/lib/jwt'
 
 // Define protected and public routes
 const protectedRoutes = ['/dashboard', '/admin', '/settings', '/profile']
-const publicRoutes = ['/login', '/register', '/']
+const publicRoutes = ['/login', '/register'] // Removed '/' from here
+const authRedirectRoutes = ['/login', '/register'] // Only these routes should redirect authenticated users
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -15,16 +16,16 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith(route)
   )
   
-  // Check if route is public
-  const isPublicRoute = publicRoutes.some(route => 
-    pathname === route || pathname.startsWith(route)
+  // Check if route should redirect authenticated users (login/register pages)
+  const shouldRedirectIfAuthenticated = authRedirectRoutes.some(route => 
+    pathname === route
   )
   
   // Enhanced debug logging
   console.log('=== Middleware Debug ===')
   console.log('Pathname:', pathname)
   console.log('Is Protected Route:', isProtectedRoute)
-  console.log('Is Public Route:', isPublicRoute)
+  console.log('Should Redirect If Authenticated:', shouldRedirectIfAuthenticated)
   
   const cookieToken = request.cookies.get('hospital_auth_token')?.value
   const headerToken = request.headers.get('authorization')?.replace('Bearer ', '')
@@ -32,6 +33,7 @@ export async function middleware(request: NextRequest) {
   console.log('Cookie Token:', cookieToken ? 'Present' : 'Missing')
   console.log('Header Token:', headerToken ? 'Present' : 'Missing')
 
+  // Handle protected routes
   if (isProtectedRoute) {
     const token = cookieToken || headerToken
     
@@ -67,28 +69,22 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Redirect authenticated users from public routes (except home page)
-  if (isPublicRoute && pathname !== '/') {
+  // Only redirect authenticated users from login/register pages
+  if (shouldRedirectIfAuthenticated) {
     const token = cookieToken
-    console.log('Checking authenticated user on public route:', pathname)
+    console.log('Checking authenticated user on auth route:', pathname)
     if (token) {
       try {
         const payload = await verifyJWT(token)
         console.log('Token verification result:', payload)
-        console.log('Payload truthy check:', !!payload)
         if (payload) {
-          console.log('Authenticated user accessing public route, redirecting to dashboard')
+          console.log('Authenticated user accessing auth route, redirecting to dashboard')
           return NextResponse.redirect(new URL('/dashboard', request.url))
-        } else {
-          console.log('Payload is falsy, not redirecting')
         }
-      } catch (error:any) {
+      } catch (error: any) {
         console.log('Token verification threw error:', error.message)
-        console.log('Full error:', error)
-        // Token invalid, allow access to public route
+        // Token invalid, allow access to auth route
       }
-    } else {
-      console.log('No token found on public route, allowing access')
     }
   }
 

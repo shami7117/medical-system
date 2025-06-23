@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -37,6 +38,8 @@ interface ActivityItem {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+
   const [stats] = useState<Stats>({
     activePatients: 127,
     pendingResults: 23,
@@ -83,9 +86,16 @@ export default function DashboardPage() {
   ]);
 
   const handleSectionNavigation = (section: "emergency" | "clinic"): void => {
-    console.log(`Navigating to ${section} section`);
-  };
+    if(section === "emergency") {
+      // Navigate to emergency section
+      router.push("/worklist/emergency/");
 
+      }else{
+    router.push(`/${section}`);
+
+      }
+  };
+  
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Welcome Section */}
