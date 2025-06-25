@@ -4,11 +4,16 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Activity, Bell, Settings, LogOut } from "lucide-react";
 import { useLogout } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useAuth";
 interface HeaderProps {
   currentTime: Date;
 }
 
 const Header: React.FC<HeaderProps> = ({ currentTime }) => {
+
+
+  const { data: profile } = useProfile();
+  
   const { mutate: logout, isPending } = useLogout();
   const formatTime = (date: Date): string => {
     return date.toLocaleTimeString("en-US", {

@@ -34,6 +34,9 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useActiveSpecialties, useCreateSpecialty } from '@/hooks/useSpecialties'
+import { useProfile } from "@/hooks/useAuth";
+
 
 // Mock data types
 interface Specialty {
@@ -184,29 +187,54 @@ const mockSpecialties: Specialty[] = [
 
 const ClinicOverviewPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const profileQuery = useProfile();
+  const profile = profileQuery.data?.data?.user;
+  const profileLoading = profileQuery.isLoading;
+  const profileError = profileQuery.error;
 
+  const hospitalId = profile?.hospital?.id || mockHospitalContext.hospital_id;
+  const {
+    data: specialties,
+    isLoading,
+    error,
+    refetch,
+  } = useActiveSpecialties(hospitalId, {
+    enabled: !!hospitalId, // This will prevent the API call until hospitalId is available
+  });
   const router = useRouter();
+
+  // Use real specialties if available, otherwise fallback to mock
+  const specialtiesList = specialties && specialties.length > 0 ? specialties : mockSpecialties;
+
   // Filter specialties based on search term
   const filteredSpecialties = useMemo(() => {
-    if (!searchTerm.trim()) return mockSpecialties;
-
-    return mockSpecialties.filter(
+    if (!searchTerm.trim()) return specialtiesList;
+    return specialtiesList.filter(
       (specialty) =>
         specialty.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        specialty.description.toLowerCase().includes(searchTerm.toLowerCase())
+        (specialty.description?.toLowerCase() || "").includes(searchTerm.toLowerCase())
     );
-  }, [searchTerm]);
+  }, [searchTerm, specialtiesList]);
+
+  // Helper to get icon for a specialty
+  const getSpecialtyIcon = (specialty: any) => specialty.icon || Heart;
+  // Helper to get color for a specialty
+  const getSpecialtyColor = (specialty: any) => specialty.color || 'bg-white border-gray-200';
+  // Helper to get active patients count
+  const getActivePatients = (specialty: any) =>
+    typeof specialty.activePatients === 'number'
+      ? specialty.activePatients
+      : specialty.stats?.totalVisits ?? 0;
 
   // Calculate total active patients
-  const totalActivePatients = mockSpecialties.reduce(
-    (sum, spec) => sum + spec.activePatients,
+  const totalActivePatients = specialtiesList.reduce(
+    (sum, spec) => sum + getActivePatients(spec),
     0
   );
 
   // Handle specialty navigation
-  const handleSpecialtyClick = (specialty: Specialty) => {
-    // In a real Next.js app, you'd use router.push()
-    router.push(`/clinic/${specialty.slug}/notes`);
+  const handleSpecialtyClick = (specialty: any) => {
+    router.push(`/clinic/${specialty.slug || specialty.name.toLowerCase().replace(/\s+/g, '-')}/notes`);
   };
 
   return (
@@ -251,91 +279,109 @@ const ClinicOverviewPage: React.FC = () => {
           </div>
           {searchTerm && (
             <p className="text-sm text-gray-600 mt-2">
-              Showing {filteredSpecialties.length} of {mockSpecialties.length}{" "}
+              Showing {filteredSpecialties.length} of {specialties?.length}{" "}
               specialties
             </p>
           )}
         </div>
 
-        {/* Specialties Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredSpecialties.map((specialty) => {
-            const IconComponent = specialty.icon;
-
-            return (
-              <TooltipProvider key={specialty.id}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Card
-                      className={`cursor-pointer transition-all duration-200 ${specialty.color} hover:shadow-lg hover:scale-[1.02] group`}
-                      onClick={() => handleSpecialtyClick(specialty)}
-                    >
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-white rounded-lg shadow-sm">
-                              <IconComponent className="h-6 w-6 text-gray-700" />
-                            </div>
-                            <div>
-                              <CardTitle className="text-lg font-semibold text-gray-900">
-                                {specialty.name}
-                              </CardTitle>
-                            </div>
-                          </div>
-                          <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-gray-600 transition-colors" />
-                        </div>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        <CardDescription className="text-sm text-gray-600 mb-3">
-                          {specialty.description}
-                        </CardDescription>
-                        <div className="flex items-center justify-between">
-                          <Badge
-                            variant="secondary"
-                            className="bg-white/60 text-gray-700"
-                          >
-                            {specialty.activePatients} active patients
-                          </Badge>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs group-hover:bg-white/80 transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSpecialtyClick(specialty);
-                            }}
-                          >
-                            View →
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Click to view {specialty.name} patient records</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            );
-          })}
-        </div>
-
-        {/* Empty State */}
-        {filteredSpecialties.length === 0 && (
-          <div className="text-center py-12">
-            <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              No specialties found
-            </h3>
-            <p className="text-gray-600">Try adjusting your search terms</p>
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={() => setSearchTerm("")}
-            >
-              Clear search
-            </Button>
+        {/* Loading Skeleton */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(6)].map((_, i) => (
+              <Card key={i} className="animate-pulse">
+                <CardHeader>
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-3 bg-gray-200 rounded w-full mb-2"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
+        ) : (
+          <>
+            {/* Specialties Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {filteredSpecialties.map((specialty) => {
+                const IconComponent = getSpecialtyIcon(specialty);
+                return (
+                  <TooltipProvider key={specialty.id}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Card
+                          className={`cursor-pointer transition-all duration-200 ${getSpecialtyColor(specialty)} hover:shadow-lg hover:scale-[1.02] group`}
+                          onClick={() => handleSpecialtyClick(specialty)}
+                        >
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white rounded-lg shadow-sm">
+                                  <IconComponent className="h-6 w-6 text-gray-700" />
+                                </div>
+                                <div>
+                                  <CardTitle className="text-lg font-semibold text-gray-900">
+                                    {specialty.name}
+                                  </CardTitle>
+                                </div>
+                              </div>
+                              <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                            </div>
+                          </CardHeader>
+                          <CardContent className="pt-0">
+                            <CardDescription className="text-sm text-gray-600 mb-3">
+                              {specialty?.description}
+                            </CardDescription>
+                            <div className="flex items-center justify-between">
+                              <Badge
+                                variant="secondary"
+                                className="bg-white/60 text-gray-700"
+                              >
+                                {getActivePatients(specialty)} active patients
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs group-hover:bg-white/80 transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSpecialtyClick(specialty);
+                                }}
+                              >
+                                View →
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Click to view {specialty.name} patient records</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                );
+              })}
+            </div>
+
+            {/* Empty State */}
+            {filteredSpecialties.length === 0 && (
+              <div className="text-center py-12">
+                <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  No specialties found
+                </h3>
+                <p className="text-gray-600">Try adjusting your search terms</p>
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => setSearchTerm("")}
+                >
+                  Clear search
+                </Button>
+              </div>
+            )}
+          </>
         )}
 
         {/* Quick Stats Footer */}
@@ -346,7 +392,7 @@ const ClinicOverviewPage: React.FC = () => {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="text-center">
               <p className="text-2xl font-bold text-blue-600">
-                {mockSpecialties.length}
+                {specialties?.length}
               </p>
               <p className="text-sm text-gray-600">Total Specialties</p>
             </div>
@@ -358,13 +404,13 @@ const ClinicOverviewPage: React.FC = () => {
             </div>
             <div className="text-center">
               <p className="text-2xl font-bold text-purple-600">
-                {Math.round(totalActivePatients / mockSpecialties.length)}
+                {Math.round(totalActivePatients / (specialties && specialties.length ? specialties.length : 1))}
               </p>
               <p className="text-sm text-gray-600">Avg per Specialty</p>
             </div>
             <div className="text-center">
               <p className="text-2xl font-bold text-orange-600">
-                {mockSpecialties.filter((s) => s.activePatients > 30).length}
+                {specialties?.filter((s) => s?.stats.totalVisits > 30).length}
               </p>
               <p className="text-sm text-gray-600">High Volume</p>
             </div>

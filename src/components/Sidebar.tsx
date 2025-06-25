@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Activity,
@@ -33,7 +33,7 @@ import {
   Folder,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-
+import { useProfile } from "@/hooks/useAuth";
 interface MenuItem {
   id: string;
   label: string;
@@ -59,6 +59,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   // Changed: All dropdowns closed by default
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const router = useRouter();
+  const profileQuery = useProfile();
+  const profile = profileQuery.data?.data?.user;
+  const profileLoading = profileQuery.isLoading;
+  const profileError = profileQuery.error;
 
   // Mock router functionality for demo
   const handleNavigation = (path: string) => {
@@ -569,12 +573,14 @@ const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div
       className={`${
-        isCollapsed ? "w-16" : "w-68"
+        isCollapsed ? "w-22" : "w-68"
       } transition-all duration-300 ease-in-out bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0`}
     >
       {/* Logo Section */}
       <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
+        <div className={`flex items-center ${
+              isCollapsed ? " " : ""
+            } justify-between`}>
           <div
             className={`flex items-center gap-3 ${
               isCollapsed ? "justify-center" : ""
@@ -594,7 +600,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             variant="ghost"
             size="sm"
             onClick={toggleSidebar}
-            className="h-8 w-8 p-0 hover:bg-gray-100"
+            className="h-8 w-8 p-4 hover:bg-gray-100"
           >
             {isCollapsed ? (
               <ChevronRight className="h-4 w-4" />
@@ -620,12 +626,26 @@ const Sidebar: React.FC<SidebarProps> = ({
               <UserCheck className="h-4 w-4 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
-                Dr. Sarah Smith
-              </p>
-              <p className="text-xs text-gray-500 truncate">
-                Chief Medical Officer
-              </p>
+              {profileLoading ? (
+                <div className="animate-pulse space-y-1">
+                  <div className="h-4 w-24 bg-gray-200 rounded mb-1" />
+                  <div className="h-3 w-16 bg-gray-200 rounded" />
+                </div>
+              ) : profileError ? (
+                <p className="text-sm text-red-500">Profile error</p>
+              ) : profile ? (
+                <>
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {profile.name || "-"}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {profile.role ? profile.role.charAt(0) + profile.role.slice(1).toLowerCase() : "-"}
+                    {profile.hospital?.name ? `, ${profile.hospital.name}` : ""}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">No profile</p>
+              )}
             </div>
           </div>
         </div>

@@ -67,6 +67,11 @@ export async function withAuth(
         role: user.role,
         email: user.email,
         name: user.name,
+        hospital:user.hospital ? {
+          id: user.hospital.id,
+          name: user.hospital.name,
+          email: user.hospital.email,
+        }: undefined
       },
       error: null
     }

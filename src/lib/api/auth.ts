@@ -76,7 +76,8 @@ export interface LoginCredentials {
   
     // Refresh user data
     getProfile: async (token: string) => {
-      const response = await fetch('/api/auth/profile', {
+     try {
+       const response = await fetch('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -87,6 +88,9 @@ export interface LoginCredentials {
       }
   
       return response.json()
+     } catch (error) {
+      console.error('Error fetching profile:', error)
+     }
     },
     // Logout user (client-side only)
     logout: async () => {
