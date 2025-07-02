@@ -101,6 +101,12 @@ model User {
 // PATIENT MANAGEMENT
 // ================================
 
+// Patient type enum - Emergency or Clinic
+enum PatientType {
+  EMERGENCY
+  CLINIC
+}
+
 model Patient {
   id String @id @default(cuid())
 
@@ -121,6 +127,16 @@ model Patient {
   insuranceProvider String?
   occupation        String?
   maritalStatus     String? // Single, Married, Divorced, Widowed
+
+  // Patient Type & Specialty Assignment
+  patientType PatientType // EMERGENCY or CLINIC
+  specialtyId String? // Required for CLINIC patients, null for EMERGENCY
+  specialty   Specialty? @relation(fields: [specialtyId], references: [id])
+
+  // Patient Flow & Triage
+  arrivalTime DateTime?
+  priority    String?   @default("Routine") // Critical, Urgent, Routine
+  status      String    @default("Waiting") // Waiting, In Progress, Completed
 
   // Multi-tenant isolation
   hospitalId String
@@ -501,7 +517,8 @@ model Specialty {
   hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
 
   // Relations
-  visits Visit[]
+  visits   Visit[]
+  patients Patient[] // Link patients to specialties
 
   // Timestamps
   createdAt DateTime @default(now())

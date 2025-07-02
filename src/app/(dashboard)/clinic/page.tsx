@@ -36,7 +36,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useActiveSpecialties, useCreateSpecialty } from '@/hooks/useSpecialties'
 import { useProfile } from "@/hooks/useAuth";
-
+import { CreateSpecialtyDialog } from './components/CreateSpecialtyDialog';
 
 // Mock data types
 interface Specialty {
@@ -265,6 +265,10 @@ const ClinicOverviewPage: React.FC = () => {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Add Specialty Button */}
+        <div className="mb-8 flex justify-end">
+          <CreateSpecialtyDialog hospitalId={hospitalId} />
+        </div>
         {/* Search and Filter Section */}
         <div className="mb-8">
           <div className="relative max-w-md">

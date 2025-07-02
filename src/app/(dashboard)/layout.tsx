@@ -44,6 +44,15 @@ export default function RootLayout({ children }: RootLayoutProps) {
     <>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+          
+      <Toaster position="top-right" 
+  richColors 
+  closeButton 
+  toastOptions={{
+    style: {
+      zIndex: 9999,
+    },
+  }} />
           <div>
             <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex">
               {/* Sidebar */}

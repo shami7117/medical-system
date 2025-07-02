@@ -22,11 +22,27 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
     const search = searchParams.get('search')
+    const priority = searchParams.get('priority') // Filter by priority
+    const status = searchParams.get('status') // Filter by status
+
     const skip = (page - 1) * limit
+
+    // Patient type and specialty filters
+    const patientType = searchParams.get('patientType');
+    const specialtyId = searchParams.get('specialtyId');
 
     const where: any = {
       hospitalId,
       isActive: true,
+    };
+
+    if (patientType === 'EMERGENCY') {
+      where.patientType = 'EMERGENCY';
+    } else if (patientType === 'CLINIC') {
+      where.patientType = 'CLINIC';
+      if (specialtyId) {
+        where.specialtyId = specialtyId;
+      }
     }
 
     if (search) {
@@ -39,32 +55,32 @@ export async function GET(request: NextRequest) {
       ]
     }
 
+    // Add priority filter
+    if (priority && ['Critical', 'Urgent', 'Routine'].includes(priority)) {
+      where.priority = priority
+    }
+
+    // Add status filter
+    if (status && ['Waiting', 'In Progress', 'Completed'].includes(status)) {
+      where.status = status
+    }
+
     const [patients, total] = await Promise.all([
       prisma.patient.findMany({
         where,
-        select: {
-          id: true,
-          mrn: true,
-          firstName: true,
-          lastName: true,
-          dateOfBirth: true,
-          gender: true,
-          phone: true,
-          email: true,
-          address: true,
-          emergencyContact: true,
-          emergencyPhone: true,
-          insuranceProvider: true,
-          createdAt: true,
-          updatedAt: true,
+        include: {
           _count: {
             select: {
               visits: true,
-              problems: { where: { status: 'ACTIVE' } },
+              problems: true,
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [
+          { priority: 'asc' } as any, // workaround for Prisma type error
+          { arrivalTime: 'asc' } as any,
+          { createdAt: 'desc' }
+        ],
         skip,
         take: limit,
       }),
@@ -75,10 +91,10 @@ export async function GET(request: NextRequest) {
       patients: patients.map(patient => ({
         ...patient,
         fullName: `${patient.firstName} ${patient.lastName}`,
-        age: Math.floor((Date.now() - patient.dateOfBirth.getTime()) / (365.25 * 24 * 60 * 60 * 1000)),
+        age: Math.floor((Date.now() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)),
         stats: {
-          totalVisits: patient._count.visits,
-          activeProblems: patient._count.problems,
+          totalVisits: patient._count?.visits ?? 0,
+          activeProblems: patient._count?.problems ?? 0,
         },
       })),
       pagination: {
@@ -119,15 +135,30 @@ export async function POST(request: NextRequest) {
       insuranceProvider,
       occupation,
       maritalStatus,
+      arrivalTime,
+      specialtyId,
+      priority,
+      status,
+      patientType
     } = body
 
-    if (!mrn || !firstName || !lastName || !dateOfBirth || !gender) {
-      return errorResponse('MRN, first name, last name, date of birth, and gender are required')
+    if (!mrn || !firstName || !lastName || !dateOfBirth || !gender || !patientType) {
+      return errorResponse('MRN, first name, last name, date of birth, gender, and patient type are required')
     }
 
     const validGenders = ['M', 'F', 'O']
     if (!validGenders.includes(gender)) {
       return errorResponse('Gender must be M, F, or O')
+    }
+
+    // Validate priority if provided
+    if (priority && !['Critical', 'Urgent', 'Routine'].includes(priority)) {
+      return errorResponse('Priority must be Critical, Urgent, or Routine')
+    }
+
+    // Validate status if provided
+    if (status && !['Waiting', 'In Progress', 'Completed'].includes(status)) {
+      return errorResponse('Status must be Waiting, In Progress, or Completed')
     }
 
     const existingPatient = await prisma.patient.findFirst({
@@ -152,21 +183,27 @@ export async function POST(request: NextRequest) {
         email: email?.toLowerCase(),
         address,
         emergencyContact,
+        patientType: patientType || 'Emergency', // Default to Emergency if not provided
         emergencyPhone,
         insuranceNumber,
         insuranceProvider,
         occupation,
+        specialtyId,
         maritalStatus,
+        arrivalTime: arrivalTime ? new Date(arrivalTime) : null,
+        priority: priority || 'Routine', // Default to Routine if not provided
+        status: status || 'Waiting', // Default to Waiting if not provided
         hospitalId,
         createdById: auth.user.id,
         isActive: true,
-      },
+      } as any,
       select: {
         id: true,
         mrn: true,
         firstName: true,
         lastName: true,
         dateOfBirth: true,
+        patientType: true,
         gender: true,
         phone: true,
         email: true,
@@ -184,8 +221,11 @@ export async function POST(request: NextRequest) {
         entity: 'Patient',
         entityId: newPatient.id,
         newValues: {
-          mrn: newPatient.mrn,
-          name: `${newPatient.firstName} ${newPatient.lastName}`,
+          mrn: (newPatient as any).mrn,
+          name: `${(newPatient as any).firstName} ${(newPatient as any).lastName}`,
+          priority: (newPatient as any).priority,
+          status: (newPatient as any).status,
+          arrivalTime: (newPatient as any).arrivalTime,
         },
         hospitalId,
         userId: auth.user.id,

@@ -10,18 +10,22 @@ export async function GET(
   context: any
 ) {
   try {
-    console.log('Request URL:', request.url)
-    console.log('Hospital ID:', context.params.hospitalId)
-        const { user, error } = await withAuth(request)
+    // Await the params before using them
+    const params = await context.params
+    const hospitalId = params.hospitalId
     
-//     const auth = await authorizeHospitalAccess(request, context.params.hospitalId)
+    console.log('Request URL:', request.url)
+    console.log('Hospital ID:', hospitalId)
+    
+    const { user, error } = await withAuth(request)
+    
+//     const auth = await authorizeHospitalAccess(request, hospitalId)
 // console.log('Auth result:', auth)
 //     if (!auth.authorized) {
 //       return auth.response
 //     }
 
-
- if (error || !user) {
+    if (error || !user) {
       return error || errorResponse('Unauthorized', 401)
     }
 
@@ -29,7 +33,7 @@ export async function GET(
     const includeInactive = searchParams.get('includeInactive') === 'true'
 
     const where: any = {
-      hospitalId: context.params.hospitalId,
+      hospitalId: hospitalId, // Use the awaited hospitalId
     }
 
     if (!includeInactive) {
