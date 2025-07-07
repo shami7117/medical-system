@@ -393,13 +393,13 @@ const ClinicNotesPage: React.FC = () => {
   const handleCompleteVisit = async () => {
     setIsSaving(true);
     await new Promise((resolve) => setTimeout(resolve, 1500));
-    console.log("Completing visit:", {
-      specialty,
-      ...formData,
-      progressNotes,
-      attachedFiles,
-      problems,
-    });
+    // console.log("Completing visit:", {
+    //   specialty,
+    //   ...formData,
+    //   progressNotes,
+    //   attachedFiles,
+    //   problems,
+    // });
     setIsSaving(false);
   };
 

@@ -60,7 +60,6 @@ export function useCreatePatientOptimistic(hospitalId: string, currentParams: Pa
       } | undefined;
       
       if (!previousData) return { previousData: null };
-      
       // Create optimistic patient
       const optimisticPatient: Patient = {
         id: `optimistic-${Date.now()}`,
@@ -75,6 +74,7 @@ export function useCreatePatientOptimistic(hospitalId: string, currentParams: Pa
         createdAt: new Date(),
         arrivalTime: newPatient.arrivalTime ? new Date(newPatient.arrivalTime) : new Date(),
         stats: { totalVisits: 0, activeProblems: 0 },
+        visits: [], // Add empty visits array for type compatibility
       };
       
       // Optimistically update cache

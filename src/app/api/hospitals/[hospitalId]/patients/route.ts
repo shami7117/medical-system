@@ -69,6 +69,21 @@ export async function GET(request: NextRequest) {
       prisma.patient.findMany({
         where,
         include: {
+          visits: {
+            select: {
+              id: true,
+              visitNumber: true,
+              type: true,
+              status: true,
+              chiefComplaint: true,
+              scheduledAt: true,
+              checkedInAt: true,
+              completedAt: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
+          },
           _count: {
             select: {
               visits: true,
@@ -96,6 +111,7 @@ export async function GET(request: NextRequest) {
           totalVisits: patient._count?.visits ?? 0,
           activeProblems: patient._count?.problems ?? 0,
         },
+        visits: patient.visits || [],
       })),
       pagination: {
         page,
@@ -110,7 +126,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create new patient
+// POST - Create new patient with automatic visit creation
 export async function POST(request: NextRequest) {
   try {
     const hospitalId = extractHospitalIdFromUrl(request)
@@ -139,7 +155,8 @@ export async function POST(request: NextRequest) {
       specialtyId,
       priority,
       status,
-      patientType
+      patientType,
+      chiefComplaint // Add this for visit creation
     } = body
 
     if (!mrn || !firstName || !lastName || !dateOfBirth || !gender || !patientType) {
@@ -156,89 +173,140 @@ export async function POST(request: NextRequest) {
       return errorResponse('Priority must be Critical, Urgent, or Routine')
     }
 
-    // Validate status if provided
-    if (status && !['Waiting', 'In Progress', 'Completed'].includes(status)) {
-      return errorResponse('Status must be Waiting, In Progress, or Completed')
-    }
-
+    // Check for existing patient
     const existingPatient = await prisma.patient.findFirst({
-      where: {
-        mrn,
-        hospitalId,
-      },
+      where: { mrn, hospitalId },
     })
 
     if (existingPatient) {
       return errorResponse('Patient with this MRN already exists')
     }
 
-    const newPatient = await prisma.patient.create({
-      data: {
-        mrn,
-        firstName,
-        lastName,
-        dateOfBirth: new Date(dateOfBirth),
-        gender,
-        phone,
-        email: email?.toLowerCase(),
-        address,
-        emergencyContact,
-        patientType: patientType || 'Emergency', // Default to Emergency if not provided
-        emergencyPhone,
-        insuranceNumber,
-        insuranceProvider,
-        occupation,
-        specialtyId,
-        maritalStatus,
-        arrivalTime: arrivalTime ? new Date(arrivalTime) : null,
-        priority: priority || 'Routine', // Default to Routine if not provided
-        status: status || 'Waiting', // Default to Waiting if not provided
-        hospitalId,
-        createdById: auth.user.id,
-        isActive: true,
-      } as any,
-      select: {
-        id: true,
-        mrn: true,
-        firstName: true,
-        lastName: true,
-        dateOfBirth: true,
-        patientType: true,
-        gender: true,
-        phone: true,
-        email: true,
-        address: true,
-        emergencyContact: true,
-        emergencyPhone: true,
-        insuranceProvider: true,
-        createdAt: true,
-      },
-    })
+    // Determine if we should create a visit
+    const shouldCreateVisit = (
+      patientType === 'EMERGENCY' || 
+      (patientType === 'CLINIC' && arrivalTime)
+    )
 
-    await prisma.auditLog.create({
-      data: {
-        action: 'CREATE',
-        entity: 'Patient',
-        entityId: newPatient.id,
-        newValues: {
-          mrn: (newPatient as any).mrn,
-          name: `${(newPatient as any).firstName} ${(newPatient as any).lastName}`,
-          priority: (newPatient as any).priority,
-          status: (newPatient as any).status,
-          arrivalTime: (newPatient as any).arrivalTime,
+    // Use transaction to ensure data consistency
+    const result = await prisma.$transaction(async (tx) => {
+      // Create the patient (remove visit-related fields from patient)
+      const newPatient = await tx.patient.create({
+        data: {
+          mrn,
+          firstName,
+          lastName,
+          dateOfBirth: new Date(dateOfBirth),
+          gender,
+          phone,
+          email: email?.toLowerCase(),
+          address,
+          emergencyContact,
+          emergencyPhone,
+          insuranceNumber,
+          insuranceProvider,
+          occupation,
+          maritalStatus,
+          patientType,
+          specialtyId: patientType === 'CLINIC' ? specialtyId : null,
+          hospitalId,
+          createdById: auth.user.id,
+          isActive: true,
         },
-        hospitalId,
-        userId: auth.user.id,
-        ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
-        userAgent: request.headers.get('user-agent') || 'unknown',
-      },
+        select: {
+          id: true,
+          mrn: true,
+          firstName: true,
+          lastName: true,
+          dateOfBirth: true,
+          patientType: true,
+          gender: true,
+          phone: true,
+          email: true,
+          address: true,
+          emergencyContact: true,
+          emergencyPhone: true,
+          insuranceProvider: true,
+          createdAt: true,
+        },
+      })
+
+      let newVisit = null
+
+      // Create visit if needed
+      if (shouldCreateVisit) {
+        // Generate unique visit number
+        const visitNumber = `${patientType}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        
+        const visitType = patientType === 'EMERGENCY' ? 'EMERGENCY' : 'CLINIC'
+        const visitStatus = arrivalTime ? 'CHECKED_IN' : 'SCHEDULED'
+
+        newVisit = await tx.visit.create({
+          data: {
+            visitNumber,
+            type: visitType,
+            status: visitStatus,
+            chiefComplaint: chiefComplaint || null,
+            scheduledAt: arrivalTime ? new Date(arrivalTime) : null,
+            checkedInAt: arrivalTime ? new Date(arrivalTime) : null,
+            patientId: newPatient.id,
+            hospitalId,
+            createdById: auth.user.id,
+            assignedToId: null, // Will be assigned later
+            specialtyId: patientType === 'CLINIC' ? specialtyId : null,
+          },
+          select: {
+            id: true,
+            visitNumber: true,
+            type: true,
+            status: true,
+            chiefComplaint: true,
+            scheduledAt: true,
+            checkedInAt: true,
+            createdAt: true,
+          },
+        })
+      }
+
+      // Create audit log
+      await tx.auditLog.create({
+        data: {
+          action: 'CREATE',
+          entity: 'Patient',
+          entityId: newPatient.id,
+          newValues: {
+            mrn: newPatient.mrn,
+            name: `${newPatient.firstName} ${newPatient.lastName}`,
+            patientType,
+            visitCreated: shouldCreateVisit,
+            visitNumber: newVisit?.visitNumber || null,
+          },
+          hospitalId,
+          userId: auth.user.id,
+          ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
+          userAgent: request.headers.get('user-agent') || 'unknown',
+        },
+      })
+
+      return { patient: newPatient, visit: newVisit }
     })
 
-    return successResponse({
-      ...newPatient,
-      fullName: `${newPatient.firstName} ${newPatient.lastName}`,
-      age: Math.floor((Date.now() - newPatient.dateOfBirth.getTime()) / (365.25 * 24 * 60 * 60 * 1000)),
-    }, 'Patient created successfully')
+    // Prepare response
+    const response = {
+      patient: {
+        ...result.patient,
+        fullName: `${result.patient.firstName} ${result.patient.lastName}`,
+        age: Math.floor((Date.now() - result.patient.dateOfBirth.getTime()) / (365.25 * 24 * 60 * 60 * 1000)),
+      },
+      visit: result.visit,
+      message: shouldCreateVisit 
+        ? 'Patient and visit created successfully' 
+        : 'Patient created successfully (no visit created)',
+    }
+
+    return successResponse(response, shouldCreateVisit 
+      ? 'Patient and visit created successfully' 
+      : 'Patient created successfully')
 
   } catch (error) {
     console.error('Create patient error:', error)

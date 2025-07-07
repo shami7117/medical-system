@@ -51,6 +51,7 @@ export interface Patient {
   hospitalId: string
   isActive: boolean
   createdAt: Date
+  visits: Array<{ id: string }> // Assuming visits is an array of visit objects
   stats?: {
     totalVisits: number
     activeProblems: number

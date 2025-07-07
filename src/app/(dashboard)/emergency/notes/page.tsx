@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
+import { useProfile } from "../../../../hooks/useAuth";
+import { usePatients } from "../../../../hooks/usePatients";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -28,7 +30,8 @@ import {
   AlertTriangle,
   Thermometer,
 } from "lucide-react";
-
+import { useEmergencyVisitData, useSaveEmergencyVisitNotes, useAddProblem, useAddProgressNote, useUpdateVitals } from '@/hooks/useEmergencyVisitNotes';
+import type { Problem as ApiProblem, ProgressNote as ApiProgressNote } from '@/hooks/useEmergencyVisitNotes';
 interface EmergencyNotesData {
   patientId: string;
   name?: string;
@@ -67,13 +70,7 @@ interface VitalSigns {
   timestamp: Date;
 }
 
-interface ProgressNote {
-  id: string;
-  timestamp: Date;
-  note: string;
-  author: string;
-}
-
+// Local type for file attachments
 interface AttachedFile {
   id: string;
   name: string;
@@ -81,17 +78,37 @@ interface AttachedFile {
   type: string;
   uploadedAt: Date;
 }
-
-interface Problem {
+// Local UI types for state
+interface UIProblem {
   id: string;
   description: string;
-  dateAdded: Date;
   isResolved: boolean;
   resolvedDate?: Date;
+  dateAdded: Date;
+}
+interface UIProgressNote {
+  id: string;
+  note: string;
+  author: string;
+  timestamp: Date;
 }
 
+const dispositionOptions = [
+  { value: "discharge", label: "Discharge home" },
+  { value: "admit", label: "Admit to ward" },
+  { value: "transfer", label: "Transfer to operating theatre" },
+];
+
+const consciousnessLevels = [
+  { value: "alert", label: "Alert and Oriented" },
+  { value: "confused", label: "Confused" },
+  { value: "drowsy", label: "Drowsy" },
+  { value: "unconscious", label: "Unconscious" },
+  { value: "gcs", label: "See GCS Score" },
+];
 const EmergencyNotesPage: React.FC = () => {
-  const [formData, setFormData] = useState<EmergencyNotesData>({
+
+    const [formData, setFormData] = useState<EmergencyNotesData>({
     patientId: "",
     name: "",
     age: "",
@@ -114,6 +131,40 @@ const EmergencyNotesPage: React.FC = () => {
     allergies: "",
   });
 
+
+
+   // --- Backend-driven patient data ---
+
+  // --- Fetch hospitalId from user profile (like worklist page) ---
+
+  const profileQuery = useProfile();
+  const profile = profileQuery.data?.data?.user;
+  const hospitalId = profile?.hospital?.id;
+  const createdById = profile?.id;
+
+  // Fetch all EMERGENCY patients for dropdown
+
+  const patientsParams = { patientType: 'EMERGENCY' as const };
+  const { data: patientsResponse, isLoading: isPatientsLoading } = usePatients(hospitalId, patientsParams);
+  const patients = patientsResponse?.data?.patients || [];
+
+  // Use selected patientId from formData
+  const selectedPatient = patients.find((p: any) => p.id === formData.patientId);
+  // Try to get visitId from selectedPatient.visitId if available, fallback to undefined
+  // If not present, you may need to adjust this logic based on your actual patient object shape
+const visitId = selectedPatient?.visits?.[0]?.id;
+console.log("selectedPatient:", selectedPatient);
+  const patientId = selectedPatient?.id;
+  // Fetch emergency visit data for selected patient
+  const { data: visitData, isLoading, error } = useEmergencyVisitData(hospitalId, visitId, patientId);
+  // --- Emergency Visit Mutations ---
+const saveVisitNotes = useSaveEmergencyVisitNotes();
+const addProblemMutation = useAddProblem();
+const addProgressNoteMutation = useAddProgressNote();
+const updateVitalsMutation = useUpdateVitals();
+
+
+
   const [vitals, setVitals] = useState<VitalSigns>({
     temperature: "",
     bloodPressureSystolic: "",
@@ -129,96 +180,16 @@ const EmergencyNotesPage: React.FC = () => {
     timestamp: new Date(),
   });
 
-  const [isSaving, setIsSaving] = useState(false);
-  const [progressNotes, setProgressNotes] = useState<ProgressNote[]>([]);
-  const [newProgressNote, setNewProgressNote] = useState("");
+  // Remove manual isSaving, use mutation state instead
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
-  const [problems, setProblems] = useState<Problem[]>([]);
+  const [problems, setProblems] = useState<UIProblem[]>([]);
+  const [progressNotes, setProgressNotes] = useState<UIProgressNote[]>([]);
+  const [newProgressNote, setNewProgressNote] = useState("");
   const [newProblem, setNewProblem] = useState("");
   const [showProgressNotes, setShowProgressNotes] = useState(false);
   const [showProblemList, setShowProblemList] = useState(false);
 
-  // Mock patient data (extended)
-  const mockPatients = [
-    {
-      id: "P001",
-      name: "John Smith",
-      age: 45,
-      mrn: "MRN-001",
-      sex: "Male",
-      dob: "1980-01-15",
-      religion: "Christianity",
-      maritalStatus: "Married",
-      address: "123 Main St, Springfield",
-      contact: "555-1234",
-      email: "john.smith@example.com",
-      nextOfKin: "Jane Smith",
-      nokContact: "555-5678",
-      allergies: "Penicillin"
-    },
-    {
-      id: "P002",
-      name: "Sarah Johnson",
-      age: 32,
-      mrn: "MRN-002",
-      sex: "Female",
-      dob: "1993-05-22",
-      religion: "Islam",
-      maritalStatus: "Single",
-      address: "456 Oak Ave, Springfield",
-      contact: "555-2345",
-      email: "sarah.johnson@example.com",
-      nextOfKin: "Michael Johnson",
-      nokContact: "555-6789",
-      allergies: "None"
-    },
-    {
-      id: "P003",
-      name: "Michael Brown",
-      age: 67,
-      mrn: "MRN-003",
-      sex: "Male",
-      dob: "1958-09-10",
-      religion: "Buddhism",
-      maritalStatus: "Widowed",
-      address: "789 Pine Rd, Springfield",
-      contact: "555-3456",
-      email: "michael.brown@example.com",
-      nextOfKin: "Emily Brown",
-      nokContact: "555-7890",
-      allergies: "Aspirin"
-    },
-    {
-      id: "P004",
-      name: "Emily Davis",
-      age: 28,
-      mrn: "MRN-004",
-      sex: "Female",
-      dob: "1997-03-30",
-      religion: "Hinduism",
-      maritalStatus: "Married",
-      address: "321 Maple St, Springfield",
-      contact: "555-4567",
-      email: "emily.davis@example.com",
-      nextOfKin: "David Davis",
-      nokContact: "555-8901",
-      allergies: "Latex"
-    },
-  ];
 
-  const dispositionOptions = [
-    { value: "discharge", label: "Discharge home" },
-    { value: "admit", label: "Admit to ward" },
-    { value: "transfer", label: "Transfer to operating theatre" },
-  ];
-
-  const consciousnessLevels = [
-    { value: "alert", label: "Alert and Oriented" },
-    { value: "confused", label: "Confused" },
-    { value: "drowsy", label: "Drowsy" },
-    { value: "unconscious", label: "Unconscious" },
-    { value: "gcs", label: "See GCS Score" },
-  ];
 
   const handleInputChange = (
     field: keyof EmergencyNotesData,
@@ -276,30 +247,28 @@ const EmergencyNotesPage: React.FC = () => {
 
   const addProgressNote = () => {
     if (newProgressNote.trim()) {
-      const note: ProgressNote = {
+      const note: UIProgressNote = {
         id: Date.now().toString(),
-        timestamp: new Date(),
         note: newProgressNote,
         author: "Dr. Emergency Physician",
+        timestamp: new Date(),
       };
       setProgressNotes((prev) => [...prev, note]);
       setNewProgressNote("");
     }
   };
-
   const addProblem = () => {
     if (newProblem.trim()) {
-      const problem: Problem = {
+      const problem: UIProblem = {
         id: Date.now().toString(),
         description: newProblem,
-        dateAdded: new Date(),
         isResolved: false,
+        dateAdded: new Date(),
       };
       setProblems((prev) => [...prev, problem]);
       setNewProblem("");
     }
   };
-
   const toggleProblemResolved = (problemId: string) => {
     setProblems((prev) =>
       prev.map((problem) =>
@@ -339,33 +308,126 @@ const EmergencyNotesPage: React.FC = () => {
     }
   };
 
-  const handleSaveAndContinue = async () => {
-    setIsSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    console.log("Saving notes:", {
-      ...formData,
-      vitals,
-      progressNotes,
-      attachedFiles,
-      problems,
+// Helper for saveVisitNotes (single object argument)
+function mutatePromiseSave<T>(mutateFn: (payload: T, options?: { onSuccess?: () => void; onError?: (err: any) => void }) => void, payload: T) {
+  return new Promise<void>((resolve, reject) => {
+    mutateFn(payload, {
+      onSuccess: () => {
+        console.log('saveVisitNotes.mutate called', payload);
+        resolve();
+      },
+      onError: (err: any) => {
+        console.error('saveVisitNotes.mutate error', err);
+        reject(err);
+      },
     });
-    setIsSaving(false);
+  });
+}
+// Helper for (visitId, payload) signature
+function mutatePromiseWithId<T>(mutateFn: (visitId: string, payload: T, options?: { onSuccess?: () => void; onError?: (err: any) => void }) => void, visitId: string, payload: T) {
+  return new Promise<void>((resolve, reject) => {
+    mutateFn(visitId, payload, {
+      onSuccess: () => {
+        console.log('mutation with visitId called', visitId, payload);
+        resolve();
+      },
+      onError: (err: any) => {
+        console.error('mutation with visitId error', err);
+        reject(err);
+      },
+    });
+  });
+}
+
+// Convert local vitals to API shape
+function toApiVitals(v: typeof vitals) {
+  return {
+    temperature: v.temperature ? parseFloat(v.temperature) : undefined,
+    bloodPressureSystolic: v.bloodPressureSystolic ? parseFloat(v.bloodPressureSystolic) : undefined,
+    bloodPressureDiastolic: v.bloodPressureDiastolic ? parseFloat(v.bloodPressureDiastolic) : undefined,
+    heartRate: v.heartRate ? parseFloat(v.heartRate) : undefined,
+    respiratoryRate: v.respiratoryRate ? parseFloat(v.respiratoryRate) : undefined,
+    oxygenSaturation: v.oxygenSaturation ? parseFloat(v.oxygenSaturation) : undefined,
+    painScore: v.painScore ? parseFloat(v.painScore) : undefined,
+    weight: v.weight ? parseFloat(v.weight) : undefined,
+    height: v.height ? parseFloat(v.height) : undefined,
+    bmi: v.bmi ? parseFloat(v.bmi) : undefined,
+    consciousness: v.consciousness || undefined,
+    timestamp: v.timestamp,
   };
+}
+
+// Move handleSaveAndContinue to top-level in component
+const handleSaveAndContinue = async () => {
+  // Build patientData from form fields
+  let dateOfBirth = formData.dob ? new Date(formData.dob).toISOString() : undefined;
+  if (!dateOfBirth && formData.age) {
+    const ageNum = parseInt(formData.age);
+    if (!isNaN(ageNum)) {
+      const now = new Date();
+      const dobYear = now.getFullYear() - ageNum;
+      dateOfBirth = new Date(dobYear, 6, 1).toISOString();
+    }
+  }
+  const patientData: any = {
+    firstName: formData.name?.split(' ')[0] || '',
+    lastName: formData.name?.split(' ').slice(1).join(' ') || '',
+    mrn: formData.mrn,
+    dateOfBirth,
+    gender: formData.sex,
+    address: formData.address,
+    phone: formData.contact,
+    email: formData.email,
+    emergencyContact: formData.nextOfKin,
+    emergencyPhone: formData.nokContact,
+    maritalStatus: formData.maritalStatus,
+    allergies: formData.allergies,
+  };
+  const hasPatientData = Object.values(patientData).some(v => v !== undefined && v !== '');
+  if (!visitId) throw new Error('No visit selected');
+  if (!createdById) throw new Error('No user ID');
+  const apiProblems = problems.map((problem) => ({
+    title: problem.description,
+    description: problem.description,
+    severity: 'Medium' as 'Medium',
+    status: (problem.isResolved ? 'RESOLVED' : 'ACTIVE') as 'RESOLVED' | 'ACTIVE',
+    onsetDate: problem.dateAdded.toISOString(),
+  }));
+  const apiProgressNotes = progressNotes.map((note) => ({
+    content: note.note,
+    noteType: 'Progress',
+    isPrivate: false,
+    attachments: [],
+  }));
+  // Use mutation's loading state, no manual setIsSaving
+  saveVisitNotes.mutate({
+    hospitalId,
+    visitId,
+    patientId,
+    createdById,
+    chiefComplaint: formData.chiefComplaint,
+    isTraumaCase: formData.isTraumaCase,
+    presentIllnessHistory: formData.historyPresentIllness,
+    examinationFindings: formData.examinationFindings,
+    assessmentAndPlan: formData.assessmentPlan,
+    disposition: formData.disposition as any,
+    vitals: toApiVitals(vitals),
+    attachments: attachedFiles.map(f => f.id),
+    problems: apiProblems,
+    progressNotes: apiProgressNotes,
+    ...(hasPatientData ? { patientData } : {}),
+  });
+};
 
   const handleCompleteVisit = async () => {
-    setIsSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    console.log("Completing visit:", {
-      ...formData,
-      vitals,
-      progressNotes,
-      attachedFiles,
-      problems,
-    });
-    setIsSaving(false);
+    // Save all notes and mark visit as complete (if your API supports it)
+    // Just call handleSaveAndContinue, which uses mutation state
+    await handleSaveAndContinue();
+    // Optionally, call a mutation to mark the visit as completed
+    // await completeVisitMutation.mutate({ hospitalId, visitId, patientId });
   };
 
-  const selectedPatient = mockPatients.find((p) => p.id === formData.patientId);
+  // patients and selectedPatient are now set above
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes";
     const k = 1024;
@@ -382,60 +444,8 @@ const EmergencyNotesPage: React.FC = () => {
     return { level: 'Severe', color: 'text-red-600' };
   };
 
-  // Mock data for emergency and clinic results
-  // Ensure patientId matches mockPatients (e.g., 'P001')
-  const mockEmergencyResults = [
-    {
-      id: "ER1",
-      patientId: "P001", // matches John Smith
-      fileName: "chest_xray_20240601.pdf",
-      category: "Radiology",
-      notes: "Chest X-ray shows clear lungs",
-      uploadTime: "2024-06-01 14:30",
-      uploadedBy: "Dr. Smith",
-    },
-    {
-      id: "ER2",
-      patientId: "P002", // matches Sarah Johnson
-      fileName: "ecg_results.pdf",
-      category: "ECG",
-      notes: "Normal sinus rhythm",
-      uploadTime: "2024-06-01 13:15",
-      uploadedBy: "Nurse Johnson",
-    },
-    {
-      id: "ER3",
-      patientId: "P001", // matches John Smith
-      fileName: "blood_work_results.pdf",
-      category: "Lab",
-      notes: "",
-      uploadTime: "2024-06-01 12:00",
-      uploadedBy: "Lab Tech",
-    },
-  ];
-
-  const mockClinicResults = [
-    {
-      id: "CR1",
-      patientId: "P001", // matches John Smith
-      fileName: "ecg_results_20240601.pdf",
-      category: "ECG",
-      notes: "Normal sinus rhythm, no abnormalities detected",
-      uploadTime: "2024-06-01 10:30",
-      uploadedBy: "Dr. Anderson",
-      specialty: "cardiology",
-    },
-    {
-      id: "CR2",
-      patientId: "P003", // matches Michael Brown
-      fileName: "knee_xray_lateral.pdf",
-      category: "X-Ray",
-      notes: "Lateral view shows mild osteoarthritis",
-      uploadTime: "2024-06-01 09:15",
-      uploadedBy: "Dr. Martinez",
-      specialty: "orthopedics",
-    },
-  ];
+// --- Integrate useEmergencyVisitNotes ---
+// (Move import to top of file)
 
   const getCategoryColor = (category: string) => {
     const colors = {
@@ -447,6 +457,61 @@ const EmergencyNotesPage: React.FC = () => {
     };
     return colors[category as keyof typeof colors] || colors.Other;
   };
+
+
+  // --- Skeleton Loader ---
+  if (isPatientsLoading) {
+    // Simple skeleton loader for the whole page
+    return (
+      <div className="min-h-screen bg-gray-50 p-4 md:p-6 flex items-center justify-center">
+        <div className="w-full max-w-4xl space-y-6 animate-pulse">
+          <div className="h-12 bg-white rounded-lg shadow-sm border mb-4" />
+          <div className="h-40 bg-white rounded-lg shadow-sm border" />
+          <div className="h-40 bg-white rounded-lg shadow-sm border" />
+          <div className="h-32 bg-white rounded-lg shadow-sm border" />
+          <div className="h-32 bg-white rounded-lg shadow-sm border" />
+          <div className="h-32 bg-white rounded-lg shadow-sm border" />
+          <div className="h-32 bg-white rounded-lg shadow-sm border" />
+          <div className="h-32 bg-white rounded-lg shadow-sm border" />
+          <div className="h-32 bg-white rounded-lg shadow-sm border" />
+          <div className="h-20 bg-white rounded-lg shadow-sm border" />
+        </div>
+      </div>
+    );
+  }
+
+  // Skeleton loader for patient fetch
+  if (isPatientsLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-full max-w-4xl mx-auto space-y-6 animate-pulse">
+          <div className="bg-white rounded-lg shadow-sm border p-6">
+            <div className="h-8 w-1/3 bg-gray-200 rounded mb-4" />
+            <div className="flex gap-4">
+              <div className="h-4 w-24 bg-gray-200 rounded" />
+              <div className="h-4 w-32 bg-gray-200 rounded" />
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border p-6">
+            <div className="h-6 w-1/4 bg-gray-200 rounded mb-2" />
+            <div className="h-4 w-full bg-gray-200 rounded mb-2" />
+            <div className="h-4 w-2/3 bg-gray-200 rounded mb-2" />
+            <div className="h-4 w-1/2 bg-gray-200 rounded" />
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border p-6">
+            <div className="h-6 w-1/4 bg-gray-200 rounded mb-2" />
+            <div className="h-4 w-full bg-gray-200 rounded mb-2" />
+            <div className="h-4 w-2/3 bg-gray-200 rounded mb-2" />
+            <div className="h-4 w-1/2 bg-gray-200 rounded" />
+          </div>
+          <div className="flex gap-3 justify-end">
+            <div className="h-10 w-32 bg-gray-200 rounded" />
+            <div className="h-10 w-32 bg-gray-200 rounded" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
@@ -482,15 +547,37 @@ const EmergencyNotesPage: React.FC = () => {
               <Label htmlFor="patient-select">Select Patient</Label>
               <Select
                 value={formData.patientId}
-                onValueChange={(value) => handleInputChange("patientId", value)}
+                onValueChange={(value) => {
+                  handleInputChange("patientId", value);
+                  // Prefill MRN and other fields from selected patient
+                  const patient = patients.find((p: any) => p.id === value);
+                  setFormData((prev) => ({
+                    ...prev,
+                    mrn: patient?.mrn ?? "",
+                    name: patient ? `${patient.firstName} ${patient.lastName}` : "",
+                    age: patient && patient.dateOfBirth ? String(new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear()) : "",
+                    sex: patient?.gender ?? "",
+                    dob: patient?.dateOfBirth
+                      ? (typeof patient.dateOfBirth === "string"
+                          ? (patient.dateOfBirth as string).substring(0, 10)
+                          : new Date(patient.dateOfBirth).toISOString().substring(0, 10))
+                      : "",
+                    address: patient?.address ?? "",
+                    contact: patient?.phone ?? "",
+                    email: patient?.email ?? "",
+                    nextOfKin: patient?.emergencyContact ?? "",
+                    nokContact: patient?.emergencyPhone ?? "",
+                    maritalStatus: patient?.maritalStatus ?? "",
+                  }));
+                }}
               >
                 <SelectTrigger id="patient-select">
                   <SelectValue placeholder="Choose a patient..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockPatients.map((patient) => (
+                  {patients.map((patient: any) => (
                     <SelectItem key={patient.id} value={patient.id}>
-                      {patient.name} (Age: {patient.age}) - {patient.mrn}
+                      {patient.firstName} {patient.lastName} (MRN: {patient.mrn})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -505,7 +592,7 @@ const EmergencyNotesPage: React.FC = () => {
                   <input
                     id="name"
                     type="text"
-                    value={selectedPatient ? selectedPatient.name : formData.name || ""}
+                    value={selectedPatient ? `${selectedPatient.firstName} ${selectedPatient.lastName}` : formData.name || ""}
                     onChange={e => handleInputChange("name", e.target.value)}
                     className="w-full px-2 py-1 border border-blue-200 rounded"
                   />
@@ -515,7 +602,7 @@ const EmergencyNotesPage: React.FC = () => {
                   <input
                     id="age"
                     type="number"
-                    value={selectedPatient ? selectedPatient.age : formData.age || ""}
+                    value={formData.age || (selectedPatient && selectedPatient.dateOfBirth ? String(new Date().getFullYear() - new Date(selectedPatient.dateOfBirth).getFullYear()) : "")}
                     onChange={e => handleInputChange("age", e.target.value)}
                     className="w-full px-2 py-1 border border-blue-200 rounded"
                   />
@@ -525,7 +612,7 @@ const EmergencyNotesPage: React.FC = () => {
                   <input
                     id="mrn"
                     type="text"
-                    value={selectedPatient ? selectedPatient.mrn : formData.mrn || ""}
+                    value={formData.mrn || ""}
                     onChange={e => handleInputChange("mrn", e.target.value)}
                     className="w-full px-2 py-1 border border-blue-200 rounded"
                   />
@@ -535,7 +622,7 @@ const EmergencyNotesPage: React.FC = () => {
                   <input
                     id="sex"
                     type="text"
-                    value={formData.sex}
+                    value={formData.sex || (selectedPatient ? selectedPatient.gender ?? "" : "")}
                     onChange={e => handleInputChange("sex", e.target.value)}
                     className="w-full px-2 py-1 border border-blue-200 rounded"
                   />
@@ -620,16 +707,16 @@ const EmergencyNotesPage: React.FC = () => {
                     className="w-full px-2 py-1 border border-blue-200 rounded"
                   />
                 </div>
-                <div className="sm:col-span-2">
-                  <Label htmlFor="allergies">Any allergies:</Label>
-                  <input
+                {/* <div className="sm:col-span-2"> */}
+                  {/* <Label htmlFor="allergies">Any allergies:</Label> */}
+                  {/* <input
                     id="allergies"
                     type="text"
                     value={formData.allergies}
                     onChange={e => handleInputChange("allergies", e.target.value)}
                     className="w-full px-2 py-1 border border-blue-200 rounded"
-                  />
-                </div>
+                  /> */}
+                {/* </div> */}
               </div>
             </div>
           </CardContent>
@@ -1006,7 +1093,8 @@ const EmergencyNotesPage: React.FC = () => {
                 <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 text-red-500" /> Emergency Results
                 </h4>
-                {mockEmergencyResults.filter(r => r.patientId === selectedPatient.id).length === 0 ? (
+                {/* Example fallback: use clinicalNotes for results if attachments not present */}
+                {visitData?.visit?.clinicalNotes && visitData.visit.clinicalNotes.filter((r: any) => r.noteType === 'EmergencyResult' && r.createdBy?.id === selectedPatient.id).length === 0 ? (
                   <div className="text-gray-500 text-sm mb-4">No emergency results found.</div>
                 ) : (
                   <div className="overflow-x-auto border rounded-lg mb-4">
@@ -1021,17 +1109,17 @@ const EmergencyNotesPage: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {mockEmergencyResults.filter(r => r.patientId === selectedPatient.id).map(result => (
+                        {visitData?.visit?.clinicalNotes?.filter((r: any) => r.noteType === 'EmergencyResult' && r.createdBy?.id === selectedPatient.id).map((result: any) => (
                           <tr key={result.id}>
-                            <td className="px-3 py-2">{result.fileName}</td>
+                            <td className="px-3 py-2">{result.title}</td>
                             <td className="px-3 py-2">
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${getCategoryColor(result.category)}`}>
-                                {result.category}
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${getCategoryColor(result.category || 'Other')}`}>
+                                {result.category || 'Other'}
                               </span>
                             </td>
-                            <td className="px-3 py-2">{result.uploadTime}</td>
-                            <td className="px-3 py-2">{result.uploadedBy}</td>
-                            <td className="px-3 py-2">{result.notes || '-'}</td>
+                            <td className="px-3 py-2">{result.createdAt ? new Date(result.createdAt).toLocaleString() : '-'}</td>
+                            <td className="px-3 py-2">{result.createdBy?.name || '-'}</td>
+                            <td className="px-3 py-2">{result.content || '-'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1044,7 +1132,7 @@ const EmergencyNotesPage: React.FC = () => {
                 <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
                   <FileText className="h-4 w-4 text-blue-500" /> Clinic Results
                 </h4>
-                {mockClinicResults.filter(r => r.patientId === selectedPatient.id).length === 0 ? (
+                {visitData?.visit?.clinicalNotes && visitData.visit.clinicalNotes.filter((r: any) => r.noteType === 'ClinicResult' && r.createdBy?.id === selectedPatient.id).length === 0 ? (
                   <div className="text-gray-500 text-sm">No clinic results found.</div>
                 ) : (
                   <div className="overflow-x-auto border rounded-lg">
@@ -1060,18 +1148,18 @@ const EmergencyNotesPage: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {mockClinicResults.filter(r => r.patientId === selectedPatient.id).map(result => (
+                        {visitData?.visit?.clinicalNotes?.filter((r: any) => r.noteType === 'ClinicResult' && r.createdBy?.id === selectedPatient.id).map((result: any) => (
                           <tr key={result.id}>
-                            <td className="px-3 py-2">{result.fileName}</td>
+                            <td className="px-3 py-2">{result.title}</td>
                             <td className="px-3 py-2">
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${getCategoryColor(result.category)}`}>
-                                {result.category}
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${getCategoryColor(result.category || 'Other')}`}>
+                                {result.category || 'Other'}
                               </span>
                             </td>
                             <td className="px-3 py-2">{result.specialty || '-'}</td>
-                            <td className="px-3 py-2">{result.uploadTime}</td>
-                            <td className="px-3 py-2">{result.uploadedBy}</td>
-                            <td className="px-3 py-2">{result.notes || '-'}</td>
+                            <td className="px-3 py-2">{result.createdAt ? new Date(result.createdAt).toLocaleString() : '-'}</td>
+                            <td className="px-3 py-2">{result.createdBy?.name || '-'}</td>
+                            <td className="px-3 py-2">{result.content || '-'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1366,22 +1454,22 @@ const EmergencyNotesPage: React.FC = () => {
             <Button
               variant="outline"
               onClick={handleSaveAndContinue}
-              disabled={isSaving || !formData.patientId}
+              disabled={saveVisitNotes.isLoading || !formData.patientId}
               className="sm:w-auto w-full"
             >
-              {isSaving ? "Saving..." : "Save and Continue"}
+              {saveVisitNotes.isLoading ? "Saving..." : "Save and Continue"}
             </Button>
             <Button
               onClick={handleCompleteVisit}
               disabled={
-                isSaving ||
+                saveVisitNotes.isLoading ||
                 !formData.patientId ||
                 !formData.chiefComplaint ||
                 !formData.disposition
               }
               className="sm:w-auto w-full bg-green-600 hover:bg-green-700"
             >
-              {isSaving ? "Processing..." : "Complete Visit"}
+              {saveVisitNotes.isLoading ? "Processing..." : "Complete Visit"}
             </Button>
           </div>
 
@@ -1399,6 +1487,6 @@ const EmergencyNotesPage: React.FC = () => {
       </div>
     </div>
   );
-};
+}
 
 export default EmergencyNotesPage;
