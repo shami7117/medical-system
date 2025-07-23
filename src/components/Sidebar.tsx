@@ -353,6 +353,13 @@ const Sidebar: React.FC<SidebarProps> = ({
         },
       ],
     },
+     {
+      id: "previous-visits",
+      label: "Previous Visits",
+      icon: FileText,
+      path: "/previous-visits",
+      // badge: "46",
+    },
     // Added: Vital Signs section with emergency and clinic subsections
     {
       id: "vitals",
@@ -404,6 +411,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       badge: "45",
       children: specialtyResultsItems,
     },
+   
 
     // {
     //   id: "patients",
