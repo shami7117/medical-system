@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Activity,
@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useProfile } from "@/hooks/useAuth";
+import { useActiveSpecialties } from '@/hooks/useSpecialties';
 interface MenuItem {
   id: string;
   label: string;
@@ -41,6 +42,7 @@ interface MenuItem {
   path: string;
   badge?: string;
   children?: MenuItem[];
+  specialtyId?: string;
 }
 
 interface SidebarProps {
@@ -70,87 +72,72 @@ const Sidebar: React.FC<SidebarProps> = ({
     router.push(path);
   };
 
-  // Specialty configurations with correct dynamic route paths for notes
-  const specialtyNotesItems: MenuItem[] = [
-    {
-      id: "general-medicine-notes",
-      label: "General Medicine",
-      icon: Stethoscope,
-      path: "/clinic/general-medicine/notes",
-    },
-    {
-      id: "general-surgery-notes",
-      label: "General Surgery",
-      icon: Scissors,
-      path: "/clinic/general-surgery/notes",
-    },
-    {
-      id: "paediatrics-notes",
-      label: "Paediatrics",
-      icon: Baby,
-      path: "/clinic/paediatrics/notes",
-    },
-    {
-      id: "obstetrics-notes",
-      label: "Obstetrics",
-      icon: Heart,
-      path: "/clinic/obstetrics/notes",
-    },
-    {
-      id: "gynaecology-notes",
-      label: "Gynaecology",
-      icon: Heart,
-      path: "/clinic/gynaecology/notes",
-    },
-    {
-      id: "dermatology-notes",
-      label: "Dermatology",
-      icon: Palette,
-      path: "/clinic/dermatology/notes",
-    },
-    {
-      id: "ent-notes",
-      label: "ENT (Ear, Nose & Throat)",
-      icon: Ear,
-      path: "/clinic/ent/notes",
-    },
-    {
-      id: "ophthalmology-notes",
-      label: "Ophthalmology",
-      icon: Eye,
-      path: "/clinic/ophthalmology/notes",
-    },
-    {
-      id: "cardiology-notes",
-      label: "Cardiology",
-      icon: Heart,
-      path: "/clinic/cardiology/notes",
-    },
-    {
-      id: "orthopaedics-notes",
-      label: "Orthopaedics",
-      icon: Zap,
-      path: "/clinic/orthopaedics/notes",
-    },
-    {
-      id: "radiology-notes",
-      label: "Radiology",
-      icon: ScanLine,
-      path: "/clinic/radiology/notes",
-    },
-    {
-      id: "psychiatry-notes",
-      label: "Psychiatry",
-      icon: Brain,
-      path: "/clinic/psychiatry/notes",
-    },
-    {
-      id: "pathology-notes",
-      label: "Pathology",
-      icon: TestTube,
-      path: "/clinic/pathology/notes",
-    },
+
+  // Specialty icon mapping (should match clinic page)
+  const specialtyIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+    Cardiology: Heart,
+    Orthopaedics: Zap,
+    Dermatology: Palette,
+    Paediatrics: Baby,
+    Ophthalmology: Eye,
+    ENT: Ear,
+    Neurology: Brain,
+    Pulmonology: Stethoscope,
+    Endocrinology: Activity,
+    Oncology: Heart,
+    Psychiatry: Brain,
+    Urology: Pill,
+    Gastroenterology: Activity,
+    Rheumatology: Zap,
+    General: Stethoscope,
+    GeneralMedicine: Stethoscope,
+    GeneralSurgery: Scissors,
+    Obstetrics: Heart,
+    Gynaecology: Heart,
+    Radiology: ScanLine,
+    Pathology: TestTube,
+  };
+
+  // Get hospitalId from profile or fallback
+  const mockHospitalContext = {
+    hospital_id: "hosp_001",
+  };
+  const hospitalId = profile?.hospital?.id || mockHospitalContext.hospital_id;
+  const { data: specialties, isLoading: specialtiesLoading } = useActiveSpecialties(hospitalId, { enabled: !!hospitalId });
+
+  // Fallback mock specialties (same as clinic page)
+  const mockSpecialties = [
+    { id: "card_001", name: "Cardiology", slug: "cardiology" },
+    { id: "orth_001", name: "Orthopaedics", slug: "orthopaedics" },
+    { id: "derm_001", name: "Dermatology", slug: "dermatology" },
+    { id: "pedi_001", name: "Paediatrics", slug: "paediatrics" },
+    { id: "opht_001", name: "Ophthalmology", slug: "ophthalmology" },
+    { id: "ent_001", name: "ENT", slug: "ent" },
+    { id: "neur_001", name: "Neurology", slug: "neurology" },
+    { id: "pul_001", name: "Pulmonology", slug: "pulmonology" },
+    { id: "endo_001", name: "Endocrinology", slug: "endocrinology" },
+    { id: "onc_001", name: "Oncology", slug: "oncology" },
+    { id: "psy_001", name: "Psychiatry", slug: "psychiatry" },
+    { id: "uro_001", name: "Urology", slug: "urology" },
+    { id: "gas_001", name: "Gastroenterology", slug: "gastroenterology" },
+    { id: "rheu_001", name: "Rheumatology", slug: "rheumatology" },
   ];
+
+  // Use real specialties if available, otherwise fallback to mock
+  const specialtiesList = specialties && specialties.length > 0 ? specialties : mockSpecialties;
+
+  // Dynamically generate specialty notes menu items
+  const specialtyNotesItems: MenuItem[] = useMemo(() =>
+    specialtiesList.map((spec:any) => ({
+      id: `${spec.slug || spec.name.toLowerCase()}-notes`,
+      label: spec.name,
+      icon: specialtyIconMap[spec.name] || Stethoscope,
+      // Pass specialtyId as query param for notes page
+      path: `/clinic/${spec.slug || spec.name.toLowerCase().replace(/\s+/g, '-')}/notes?specialtyId=${spec.id}`,
+      specialtyId: spec.id,
+    })),
+    [specialtiesList]
+  );
 
   // Specialty configurations for vitals pages
   const specialtyVitalsItems: MenuItem[] = [
@@ -361,7 +348,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           label: "Clinic Notes",
           icon: Stethoscope,
           path: "#",
-          badge: "45",
+          badge: specialtiesList.length.toString(),
           children: specialtyNotesItems,
         },
       ],
@@ -463,6 +450,14 @@ const Sidebar: React.FC<SidebarProps> = ({
     // If item has children and no path (is a parent), toggle expansion
     if (item.children && item.path === "#") {
       toggleExpanded(item.id);
+      return;
+    }
+
+    // If item is a specialty notes item, send specialtyId in params
+    if (item.path && item.path.includes('/clinic/') && item.path.includes('/notes') && item.specialtyId) {
+      setActiveItem(item.id);
+      // Use router.push with query param
+      handleNavigation(item.path);
       return;
     }
 

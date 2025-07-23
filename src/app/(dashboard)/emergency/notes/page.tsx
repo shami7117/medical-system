@@ -145,7 +145,7 @@ const EmergencyNotesPage: React.FC = () => {
   // Fetch all EMERGENCY patients for dropdown
 
   const patientsParams = { patientType: 'EMERGENCY' as const };
-  const { data: patientsResponse, isLoading: isPatientsLoading } = usePatients(hospitalId, patientsParams);
+  const { data: patientsResponse, isLoading: isPatientsLoading ,error:patientError} = usePatients(hospitalId, patientsParams);
   const patients = patientsResponse?.data?.patients || [];
 
   // Use selected patientId from formData
