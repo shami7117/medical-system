@@ -324,6 +324,13 @@ const Sidebar: React.FC<SidebarProps> = ({
       badge: "8",
     },
     {
+      id: "team-members",
+      label: "Team Members",
+      icon: Users,
+      path: "/team-members",
+      // badge: "45",
+    },
+    {
       id: "clinic",
       label: "Outpatient Worklist",
       icon: Stethoscope,
