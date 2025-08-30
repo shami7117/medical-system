@@ -418,8 +418,8 @@ const ClinicNotesPage: React.FC = () => {
                     sex: patient?.gender ?? "",
                     dob:
                       patient && patient.dateOfBirth
-                        ? typeof patient.dateOfBirth === "string" && patient.dateOfBirth
-                          ? patient.dateOfBirth.toISOString().substring(0, 10)
+                        ? typeof patient.dateOfBirth === "string"
+                          ? patient.dateOfBirth.substring(0, 10)
                           : new Date(patient.dateOfBirth).toISOString().substring(0, 10)
                         : "",
                     address: patient?.address ?? "",

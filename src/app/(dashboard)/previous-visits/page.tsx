@@ -344,7 +344,7 @@ const PatientVisitHistoryPage: React.FC = () => {
               </div>
             </div>
             
-            <div className="lg:w-48">
+            {/* <div className="lg:w-48">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 View Mode
               </label>
@@ -356,9 +356,9 @@ const PatientVisitHistoryPage: React.FC = () => {
                 <option value="detailed">Detailed View</option>
                 <option value="summary">Summary View</option>
               </select>
-            </div>
+            </div> */}
 
-            <div className="lg:w-32 flex items-end">
+            <div className="lg:w-42 flex items-end">
               <button
                 onClick={searchPatient}
                 disabled={loading || !mrn.trim()}
